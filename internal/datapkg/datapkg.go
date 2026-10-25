@@ -7,7 +7,10 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"hash/crc32"
 	"net/url"
+	"os"
+	"path"
 	"sort"
 	"strconv"
 	"strings"
@@ -213,12 +216,41 @@ type file struct {
 	data []byte
 }
 
+// buildZip writes a "classic" archive that every ZIP reader accepts, including ATAK's own
+// com.atakmap.util.zip and the iOS unzip libraries: entries are stored uncompressed with sizes and
+// CRC in the local headers (no data descriptors), no extended-timestamp extra fields, and
+// explicit directory entries like the packages TAK Server produces.
 func buildZip(pkgName string, files []file, manifest bool) ([]byte, error) {
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
 	mod := time.Now()
+	dirs := map[string]bool{}
+	writeDir := func(name string) error {
+		dir := path.Dir(name)
+		if dir == "." || dirs[dir] {
+			return nil
+		}
+		dirs[dir] = true
+		fh := &zip.FileHeader{Name: dir + "/", Method: zip.Store}
+		fh.SetModTime(mod) //nolint:staticcheck // DOS time only: no extra field
+		fh.SetMode(0o755 | os.ModeDir)
+		_, err := zw.CreateRaw(fh)
+		return err
+	}
 	write := func(name string, data []byte) error {
-		w, err := zw.CreateHeader(&zip.FileHeader{Name: name, Method: zip.Deflate, Modified: mod})
+		if err := writeDir(name); err != nil {
+			return err
+		}
+		fh := &zip.FileHeader{
+			Name:               name,
+			Method:             zip.Store,
+			CRC32:              crc32.ChecksumIEEE(data),
+			CompressedSize64:   uint64(len(data)),
+			UncompressedSize64: uint64(len(data)),
+		}
+		fh.SetModTime(mod) //nolint:staticcheck // DOS time only: no extra field
+		fh.SetMode(0o644)
+		w, err := zw.CreateRaw(fh)
 		if err != nil {
 			return err
 		}
