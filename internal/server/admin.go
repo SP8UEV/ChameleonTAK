@@ -155,7 +155,12 @@ func (a *App) applyFirewall() error {
 		return system.ErrUnsupported
 	}
 	cfg := a.cfg.Get()
-	ports := []int{cfg.Ports.HTTP, cfg.Ports.HTTPS, cfg.Ports.CoTTLS, cfg.Ports.Marti, cfg.Ports.Enroll}
+	ports := []int{cfg.Ports.HTTP, cfg.Ports.HTTPS}
+	if !cfg.SetupDone {
+		// Setup mode: only the panel (the helper adds 22 itself while SSH is running).
+		return a.helper.Run("", "firewall", fmt.Sprintf("%d,%d", cfg.Ports.HTTP, cfg.Ports.HTTPS))
+	}
+	ports = append(ports, cfg.Ports.CoTTLS, cfg.Ports.Marti, cfg.Ports.Enroll)
 	if cfg.Ports.CoTTCPEnabled {
 		ports = append(ports, cfg.Ports.CoTTCP)
 	}

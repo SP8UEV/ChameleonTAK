@@ -52,6 +52,7 @@ type App struct {
 	pos     *Positions
 	helper  *system.Helper
 	limiter *limiter
+	logs    *logRing
 
 	started time.Time
 	setup   *setupJob
@@ -89,7 +90,10 @@ func New(opts Options, log *slog.Logger) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
+	logs := newLogRing()
+	log = slog.New(&ringHandler{inner: log.Handler(), ring: logs})
 	a := &App{
+		logs:    logs,
 		opts:    opts,
 		log:     log,
 		store:   st,
@@ -121,6 +125,11 @@ func (a *App) Run(ctx context.Context) error {
 		a.startServices()
 	} else {
 		a.log.Info("serwer nie jest skonfigurowany — otwórz panel WWW, aby uruchomić kreator", "addr", a.httpAddr)
+	}
+
+	// Re-apply the firewall on every start, so it always matches the configuration and the SSH state.
+	if err := a.applyFirewall(); err != nil && !errors.Is(err, system.ErrUnsupported) {
+		a.log.Warn("zapora", "err", err)
 	}
 
 	go a.pos.Run(ctx)

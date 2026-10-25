@@ -15,7 +15,6 @@ import (
 	"chameleontak/internal/cot"
 )
 
-
 // newTestServer runs the setup and starts all services on free local ports.
 func newTestServer(t *testing.T) *App {
 	t.Helper()

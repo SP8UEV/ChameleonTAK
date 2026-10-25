@@ -1,5 +1,6 @@
 import { http } from './client';
 import type {
+  LogEntry,
   BulkUsersRequest,
   Cert,
   ChatMessage,
@@ -73,6 +74,7 @@ export const api = {
   deleteGroup: (id: number) => http.del<void>(`/api/groups/${id}`),
 
   clients: () => http.get<Client[]>('/api/clients'),
+  logs: () => http.get<LogEntry[]>('/api/logs?limit=500'),
   disconnectClient: (id: string) => http.del<void>(`/api/clients/${enc(id)}`),
 
   positions: () => http.get<Position[]>('/api/positions'),

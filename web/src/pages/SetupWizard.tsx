@@ -155,7 +155,7 @@ export default function SetupWizard() {
         hotspotPassword: randomPassword(),
         leEnabled: false,
         leEmail: '',
-        ssh: false,
+        ssh: true,
       });
     } catch (e) {
       setLoadError(errorMessage(e));
@@ -663,7 +663,7 @@ export default function SetupWizard() {
               checked={form.ssh}
               onChange={(v) => set('ssh', v)}
               label="Zdalny dostęp SSH"
-              hint="Potrzebny tylko do serwisu. Zostaw wyłączony, jeśli nie wiesz, do czego służy."
+              hint="Włączony domyślnie (konto tak). Hasło konta tak zostanie zmienione na hasło administratora."
             />
           )}
         </div>

@@ -121,7 +121,7 @@ func (a *App) martiHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		caller, err := a.martiAuthenticate(r)
 		if err != nil {
-			a.log.Debug("marti: odmowa", "path", r.URL.Path, "ip", clientIP(r), "err", err)
+			a.log.Info("odmowa dostępu (Marti)", "path", r.URL.Path, "ip", clientIP(r), "err", err)
 			w.Header().Set("WWW-Authenticate", `Basic realm="ChameleonTAK"`)
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
@@ -141,6 +141,7 @@ func (a *App) martiJSON(w http.ResponseWriter, status int, typ string, data any)
 
 func (a *App) mTLSConfig(w http.ResponseWriter, r *http.Request) {
 	cfg := a.cfg.Get()
+	a.log.Info("enrollment: klient pobiera konfigurację certyfikatu", "user", callerOf(r).User.Username, "ip", clientIP(r), "ua", r.UserAgent())
 	w.Header().Set("Content-Type", "application/xml")
 	fmt.Fprintf(w, `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`+
 		`<ns2:certificateConfig xmlns="http://bbn.com/marti/xml/config" xmlns:ns2="com.bbn.marti.config">`+
@@ -293,6 +294,7 @@ func guessPlatform(s string) string {
 // mProfileEnrollment returns the device profile pushed right after enrollment (callsign, team, role, …).
 func (a *App) mProfileEnrollment(w http.ResponseWriter, r *http.Request) {
 	caller := callerOf(r)
+	a.log.Info("profil urządzenia pobrany", "user", caller.User.Username, "path", r.URL.Path, "ip", clientIP(r))
 	cfg := a.cfg.Get()
 	platform := "atak"
 	if caller.DeviceID > 0 {

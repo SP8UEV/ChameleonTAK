@@ -380,3 +380,11 @@ export type WsMessage =
   | { type: 'remove'; data: { uid: string } }
   | { type: 'client'; data: { event: 'connect' | 'disconnect'; client: Client } }
   | { type: 'chat'; data: ChatMessage };
+
+/** Zdarzenie z dziennika serwera (GET /api/logs, najnowsze pierwsze). */
+export interface LogEntry {
+  time: string;
+  level: 'INFO' | 'WARN' | 'ERROR' | string;
+  message: string;
+  attrs: Record<string, string>;
+}

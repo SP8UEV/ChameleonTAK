@@ -70,7 +70,7 @@ func (l *Listener) handle(conn net.Conn) {
 		err := tc.HandshakeContext(ctx)
 		cancel()
 		if err != nil {
-			l.r.log.Debug("tls handshake", "remote", conn.RemoteAddr().String(), "err", err)
+			l.r.log.Info("nieudany handshake TLS (strumień CoT)", "ip", conn.RemoteAddr().String(), "err", err)
 			conn.Close()
 			return
 		}

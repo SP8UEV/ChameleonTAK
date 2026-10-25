@@ -3,6 +3,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   Ellipsis,
   Files,
+  FileText,
   Flag,
   Group,
   LayoutDashboard,
@@ -45,6 +46,7 @@ const NAV_DATA: NavDef[] = [
 ];
 const NAV_SERVER: NavDef[] = [
   { to: '/certs', label: 'Certyfikaty', icon: ShieldCheck },
+  { to: '/logs', label: 'Dziennik', icon: FileText },
   { to: '/settings', label: 'Ustawienia', icon: SettingsIcon },
 ];
 const TABS: NavDef[] = [

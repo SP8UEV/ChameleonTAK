@@ -15,7 +15,7 @@ FIRST_USER_NAME=tak
 FIRST_USER_PASS=chameleontak
 # Bez interaktywnego kreatora zmiany użytkownika przy pierwszym starcie.
 DISABLE_FIRST_BOOT_USER_RENAME=1
-ENABLE_SSH=0
+ENABLE_SSH=1
 
 LOCALE_DEFAULT=pl_PL.UTF-8
 KEYBOARD_KEYMAP=pl

@@ -687,5 +687,6 @@ func (a *App) hJoinPackage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = a.store.MarkTokenUsed(t.Token)
+	a.log.Info("pobrano paczkę konfiguracyjną", "user", u.Username, "platform", platform, "ip", clientIP(r), "ua", r.UserAgent())
 	sendZip(w, name, data)
 }

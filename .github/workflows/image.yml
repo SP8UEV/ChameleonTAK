@@ -69,7 +69,7 @@ jobs:
           username: tak
           password: chameleontak
           disable-first-boot-user-rename: 1
-          enable-ssh: 0
+          enable-ssh: 1
           locale: pl_PL.UTF-8
           keyboard-keymap: pl
           keyboard-layout: Polish

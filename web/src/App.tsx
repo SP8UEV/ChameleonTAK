@@ -16,6 +16,7 @@ const PrintCards = lazy(() => import('./pages/PrintCards'));
 const Join = lazy(() => import('./pages/Join'));
 const Groups = lazy(() => import('./pages/Groups'));
 const Clients = lazy(() => import('./pages/Clients'));
+const Logs = lazy(() => import('./pages/Logs'));
 const Chat = lazy(() => import('./pages/Chat'));
 const FilesPage = lazy(() => import('./pages/Files'));
 const Missions = lazy(() => import('./pages/Missions'));
@@ -92,6 +93,7 @@ export default function App() {
               <Route path="/users/:id" element={<UserDetail />} />
               <Route path="/groups" element={<Groups />} />
               <Route path="/clients" element={<Clients />} />
+              <Route path="/logs" element={<Logs />} />
               <Route path="/chat" element={<Chat />} />
               <Route path="/files" element={<FilesPage />} />
               <Route path="/missions" element={<Missions />} />

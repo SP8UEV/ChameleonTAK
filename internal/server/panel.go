@@ -171,6 +171,7 @@ func (a *App) apiMux() *http.ServeMux {
 	adm("DELETE /api/missions/{name}/files/{hash}", a.hMissionRemoveFile)
 
 	adm("GET /api/certs", a.hListCerts)
+	adm("GET /api/logs", a.hLogs)
 	adm("POST /api/certs/{serial}/revoke", a.hRevokeCert)
 
 	pub("/api/", func(w http.ResponseWriter, r *http.Request) { httpError(w, http.StatusNotFound, "Nieznany adres API.") })

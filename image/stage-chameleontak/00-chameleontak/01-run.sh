@@ -27,4 +27,5 @@ if [ "${magic}" != "7f454c46" ] || [ "${machine}" != "b700" ]; then
 	exit 1
 fi
 
-bash "${PKG}/install-files.sh" --root "${ROOTFS_DIR}" --binary "${BIN}"
+# SSH is on from the first boot, so the initial (setup-mode) firewall opens 22 as well.
+bash "${PKG}/install-files.sh" --root "${ROOTFS_DIR}" --binary "${BIN}" --extra-tcp-ports 22

@@ -328,15 +328,24 @@ func (a *App) RunSetup(req SetupRequest, job *setupJob) error {
 
 	if err := step("ssh", func() (string, error) {
 		if !req.SSH.Enabled {
-			return "skip", nil
+			if err := a.helper.Run("", "ssh", "disable"); err != nil {
+				return "", err
+			}
+			return "SSH wyłączone.", nil
 		}
+		// The image ships with SSH on and the default password; replace it with the admin password.
+		pwMsg := "Konto systemowe: tak (hasło jak administratora)"
 		if err := a.helper.Run(req.Admin.Password, "set-password", "tak"); err != nil {
-			return "", err
+			if !strings.Contains(err.Error(), system.ErrLocked.Error()) {
+				return "", err
+			}
+			// After a factory reset the helper stays locked: the previous password remains.
+			pwMsg = "Konto systemowe: tak (hasło bez zmian — ustawione przy pierwszej konfiguracji)"
 		}
 		if err := a.helper.Run("", "ssh", "enable"); err != nil {
 			return "", err
 		}
-		return "Konto systemowe: tak (hasło jak administratora)", nil
+		return pwMsg, nil
 	}); err != nil {
 		return err
 	}

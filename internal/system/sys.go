@@ -104,6 +104,10 @@ func RunSys(args []string, stdin io.Reader) error {
 		if _, err := os.Stat("/etc/chameleontak/firewall.disabled"); err == nil {
 			return nil
 		}
+		// Never lock out SSH that is running, however it was enabled (image default, Imager, by hand).
+		if sshActive() {
+			ports = append(ports, 22)
+		}
 		if err := os.MkdirAll("/etc/chameleontak", 0o755); err != nil {
 			return err
 		}
@@ -214,6 +218,9 @@ func RunSys(args []string, stdin io.Reader) error {
 		}
 		switch rest[0] {
 		case "enable":
+			if sshActive() {
+				return nil
+			}
 			if locked() {
 				return ErrLocked
 			}
@@ -255,6 +262,15 @@ func RunSys(args []string, stdin io.Reader) error {
 
 // FirewallRules renders the nftables table that replaces itself atomically.
 func FirewallRules(tcpPorts []int) string {
+	seen := map[int]bool{}
+	uniq := tcpPorts[:0:0]
+	for _, p := range tcpPorts {
+		if !seen[p] {
+			seen[p] = true
+			uniq = append(uniq, p)
+		}
+	}
+	tcpPorts = uniq
 	sort.Ints(tcpPorts)
 	ps := make([]string, 0, len(tcpPorts))
 	for _, p := range tcpPorts {
@@ -381,4 +397,8 @@ func kfEscape(s string) string {
 		s = `\s` + s[1:]
 	}
 	return s
+}
+
+func sshActive() bool {
+	return exec.Command("systemctl", "is-active", "--quiet", "ssh").Run() == nil
 }
