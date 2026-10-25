@@ -123,7 +123,7 @@ func TestEnrollmentWithTokenThenStream(t *testing.T) {
 		RootCAs:      app.pki.CAPool(), ServerName: "127.0.0.1",
 	})
 	c.send(t, saXML("ANDROID-123", "JAN"))
-	time.Sleep(200 * time.Millisecond)
+	waitUIDs(t, app, "ANDROID-123")
 	clients := app.router.Clients()
 	if len(clients) != 1 || clients[0].DeviceID != d.ID || clients[0].Username != "jan" {
 		t.Fatalf("unexpected clients: %+v", clients)

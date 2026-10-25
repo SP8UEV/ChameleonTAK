@@ -17,7 +17,7 @@ func TestMissionLifecycle(t *testing.T) {
 	b := dialCoT(t, app, bCfg)
 	a.send(t, saXML("UID-DOW", "DOW"))
 	b.send(t, saXML("UID-ZOL", "ZOL"))
-	time.Sleep(200 * time.Millisecond)
+	waitUIDs(t, app, "UID-DOW", "UID-ZOL")
 
 	port := app.cfg.Get().Ports.Marti
 	ca := httpsClient(app, aCfg.Certificates...)

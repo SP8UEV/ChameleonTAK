@@ -150,7 +150,7 @@ func TestStreamRoutingAndPing(t *testing.T) {
 	app := newTestServer(t)
 	alfa := dialCoT(t, app, clientTLS(t, app, "alfa", nil))
 	alfa.send(t, saXML("UID-ALFA", "ALFA"))
-	time.Sleep(200 * time.Millisecond)
+	waitUIDs(t, app, "UID-ALFA")
 
 	// A newcomer immediately receives the cached SA of everyone online.
 	bravo := dialCoT(t, app, clientTLS(t, app, "bravo", nil))
@@ -168,7 +168,7 @@ func TestStreamRoutingAndPing(t *testing.T) {
 		t.Fatalf("expected 2 clients, got %d", n)
 	}
 	// The map knows both contacts.
-	time.Sleep(100 * time.Millisecond)
+	waitFor(t, "two contacts on the map", func() bool { return len(app.pos.List()) >= 2 })
 	found := 0
 	for _, p := range app.pos.List() {
 		if p.Kind == "contact" && p.Online {
@@ -185,7 +185,7 @@ func TestGroupsIsolateTraffic(t *testing.T) {
 	red1 := dialCoT(t, app, clientTLS(t, app, "red1", []string{"Czerwoni"}))
 	red2 := dialCoT(t, app, clientTLS(t, app, "red2", []string{"Czerwoni"}))
 	blue := dialCoT(t, app, clientTLS(t, app, "blue", []string{"Niebiescy"}))
-	time.Sleep(100 * time.Millisecond)
+	waitClients(t, app, 3)
 
 	red1.send(t, saXML("UID-RED1", "RED1"))
 	red2.expect(t, `callsign="RED1"`)
@@ -200,7 +200,7 @@ func TestDirectMessageByCallsign(t *testing.T) {
 	a.send(t, saXML("UID-A", "A1"))
 	b.send(t, saXML("UID-B", "B1"))
 	c.send(t, saXML("UID-C", "C1"))
-	time.Sleep(200 * time.Millisecond)
+	waitUIDs(t, app, "UID-A", "UID-B", "UID-C")
 
 	msg := `<event version="2.0" uid="GeoChat.UID-A.UID-B.x1" type="b-t-f" how="h-g-i-g-o" time="2026-10-25T10:00:00Z" start="2026-10-25T10:00:00Z" stale="2030-10-26T10:00:00Z"><point lat="0" lon="0" hae="0" ce="9999999" le="9999999"/><detail><__chat parent="RootContactGroup" groupOwner="false" messageId="x1" chatroom="B1" id="UID-B" senderCallsign="A1"><chatgrp uid0="UID-A" uid1="UID-B" id="UID-B"/></__chat><remarks source="BAO.F.ATAK.UID-A" to="UID-B" time="2026-10-25T10:00:00Z">tajne</remarks><marti><dest callsign="B1"/></marti></detail></event>`
 	a.send(t, msg)
@@ -236,3 +236,33 @@ func TestRevokedCertificateRejected(t *testing.T) {
 }
 
 func itoa(n int) string { return strconv.Itoa(n) }
+
+// waitFor polls cond instead of sleeping a fixed time, so tests stay reliable on slow CI runners.
+func waitFor(t *testing.T, what string, cond func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for !cond() {
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for %s", what)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// waitUIDs waits until the router knows a connection for every UID (its SA was processed).
+func waitUIDs(t *testing.T, app *App, uids ...string) {
+	t.Helper()
+	waitFor(t, "UIDs "+strings.Join(uids, ","), func() bool {
+		for _, u := range uids {
+			if app.router.ClientByUID(u) == nil {
+				return false
+			}
+		}
+		return true
+	})
+}
+
+func waitClients(t *testing.T, app *App, n int) {
+	t.Helper()
+	waitFor(t, "connected clients", func() bool { return app.router.Count() >= n })
+}

@@ -32,7 +32,7 @@ func TestMissionOwnerAndPasswordCannotBeSpoofed(t *testing.T) {
 	evilCfg := clientTLS(t, app, "intruz", nil)
 	owner := dialCoT(t, app, ownerCfg)
 	owner.send(t, saXML("UID-OWNER", "OWNER"))
-	time.Sleep(200 * time.Millisecond)
+	waitUIDs(t, app, "UID-OWNER")
 
 	if code, body := marti(t, app, ownerCfg, "PUT", "/Marti/api/missions/Tajna?creatorUid=UID-OWNER&password=sekret123", ""); code != 201 {
 		t.Fatalf("create: %d %s", code, body)
@@ -68,7 +68,7 @@ func TestCrossGroupIsolationOnMartiAndMissions(t *testing.T) {
 	blue := dialCoT(t, app, blueCfg)
 	red.send(t, saXML("UID-RED", "RED"))
 	blue.send(t, saXML("UID-BLUE", "BLUE"))
-	time.Sleep(200 * time.Millisecond)
+	waitUIDs(t, app, "UID-RED", "UID-BLUE")
 
 	// clientEndPoints only lists visible contacts.
 	if _, body := marti(t, app, blueCfg, "GET", "/Marti/api/clientEndPoints", ""); strings.Contains(body, "UID-RED") {
@@ -97,10 +97,11 @@ func TestUIDHijackRejected(t *testing.T) {
 	app := newTestServer(t)
 	victim := dialCoT(t, app, clientTLS(t, app, "ofiara", nil))
 	victim.send(t, saXML("UID-VICTIM", "OFIARA"))
-	time.Sleep(200 * time.Millisecond)
+	waitUIDs(t, app, "UID-VICTIM")
 	attacker := dialCoT(t, app, clientTLS(t, app, "napastnik", nil))
 	attacker.send(t, saXML("UID-VICTIM", "PODSZYW"))
-	time.Sleep(300 * time.Millisecond)
+	waitClients(t, app, 2)
+	time.Sleep(300 * time.Millisecond) // give the rejected SA time to (not) take effect
 
 	if c := app.router.ClientByUID("UID-VICTIM"); c == nil || c.Identity.Username != "ofiara" {
 		t.Fatal("the victim lost its UID")
