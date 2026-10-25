@@ -1,0 +1,8 @@
+# ChameleonTAK: usługa (użytkownik chameleontak) może uruchamiać jako root WYŁĄCZNIE
+# pomocnika systemowego `chameleontak sys <akcja> ...`. Każda akcja sama waliduje argumenty,
+# sekrety (hasła) przyjmuje na stdin.
+#
+# Plik instalowany przez ChameleonTAK (obraz / install.sh) - przy aktualizacji zostanie nadpisany.
+# Sprawdzenie składni: visudo -cf /etc/sudoers.d/chameleontak
+
+chameleontak ALL=(root) NOPASSWD: /usr/local/bin/chameleontak sys *

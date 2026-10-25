@@ -1,0 +1,35 @@
+# Konfiguracja pi-gen dla obrazu ChameleonTAK (Raspberry Pi OS Lite arm64, Debian Trixie).
+#
+# Używana przez image/build.sh (budowanie lokalne: pi-gen, gałąź "arm64", build-docker.sh).
+# CI (.github/workflows/image.yml) przekazuje TE SAME wartości jako wejścia usimd/pi-gen-action -
+# przy zmianach aktualizuj oba miejsca.
+
+IMG_NAME=chameleontak
+PI_GEN_RELEASE="ChameleonTAK"
+RELEASE=trixie
+
+TARGET_HOSTNAME=chameleontak
+
+# Konto systemowe (konsola lokalna). SSH jest wyłączone; można je włączyć w kreatorze / panelu.
+FIRST_USER_NAME=tak
+FIRST_USER_PASS=chameleontak
+# Bez interaktywnego kreatora zmiany użytkownika przy pierwszym starcie.
+DISABLE_FIRST_BOOT_USER_RENAME=1
+ENABLE_SSH=0
+
+LOCALE_DEFAULT=pl_PL.UTF-8
+KEYBOARD_KEYMAP=pl
+KEYBOARD_LAYOUT="Polish"
+TIMEZONE_DEFAULT=Europe/Warsaw
+# Kraj Wi-Fi - bez niego Raspberry Pi OS trzyma Wi-Fi zablokowane (rfkill), a hotspot kreatora nie wstanie.
+WPA_COUNTRY=PL
+
+# cloud-init (domyślne w pi-gen dla Trixie) - zostawiamy jak w oficjalnym Raspberry Pi OS Lite.
+ENABLE_CLOUD_INIT=1
+
+DEPLOY_COMPRESSION=xz
+COMPRESSION_LEVEL=6
+
+# stage0-2 = Raspberry Pi OS Lite, potem nasz etap (ma EXPORT_IMAGE -> to on jest eksportowany).
+# image/build.sh kopiuje etap do katalogu pi-gen jako "stage-chameleontak".
+STAGE_LIST="stage0 stage1 stage2 stage-chameleontak"

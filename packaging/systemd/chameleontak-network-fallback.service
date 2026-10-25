@@ -1,0 +1,17 @@
+[Unit]
+Description=ChameleonTAK - hotspot kreatora, gdy brak sieci (ChameleonTAK-Setup)
+# Po ukończeniu kreatora usługa w ogóle się nie uruchamia (skrypt i tak to sprawdza).
+ConditionPathExists=!/var/lib/chameleontak/.setup-done
+After=NetworkManager.service
+Wants=NetworkManager.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+EnvironmentFile=-/etc/default/chameleontak
+ExecStart=/usr/local/lib/chameleontak/network-fallback.sh
+# ~60 s czekania na sieć + ustawienie kraju Wi-Fi + do 3 prób uruchomienia hotspotu.
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target

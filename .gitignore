@@ -1,0 +1,12 @@
+/dist/
+/devdata/
+*.exe
+*.test
+*.out
+web/node_modules/
+image/stage-chameleontak/**/files/chameleontak
+image/work/
+image/deploy/
+internal/panel/dist/*
+!internal/panel/dist/.keep
+/.claude/launch.json

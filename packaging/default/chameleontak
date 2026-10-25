@@ -1,0 +1,21 @@
+# ChameleonTAK - ustawienia hotspotu kreatora pierwszego uruchomienia
+# (chameleontak-network-fallback.service -> /usr/local/lib/chameleontak/network-fallback.sh).
+#
+# Hotspot powstaje TYLKO przed ukończeniem kreatora (brak /var/lib/chameleontak/.setup-done)
+# i TYLKO gdy w ciągu CHAMELEONTAK_NET_WAIT sekund nie pojawi się adres IPv4 (kabel / Wi-Fi).
+# Plik nie jest nadpisywany przy aktualizacji.
+
+# Kraj regulacyjny Wi-Fi (ISO 3166, 2 litery). Raspberry Pi OS blokuje Wi-Fi, dopóki kraj
+# nie jest ustawiony. Używany tylko wtedy, gdy system nie ma jeszcze ustawionego kraju.
+CHAMELEONTAK_WIFI_COUNTRY=PL
+
+# Nazwa sieci i hasło (WPA2, 8-63 znaki) hotspotu kreatora.
+#CHAMELEONTAK_SETUP_SSID=ChameleonTAK-Setup
+#CHAMELEONTAK_SETUP_PSK=chameleontak
+
+# Interfejs Wi-Fi i kanał (2,4 GHz) hotspotu.
+#CHAMELEONTAK_SETUP_IFACE=wlan0
+#CHAMELEONTAK_SETUP_CHANNEL=6
+
+# Ile sekund czekać na adres IPv4, zanim zostanie uruchomiony hotspot.
+#CHAMELEONTAK_NET_WAIT=60

@@ -1,0 +1,49 @@
+[Unit]
+Description=ChameleonTAK - serwer TAK
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=chameleontak
+Group=chameleontak
+ExecStart=/usr/local/bin/chameleontak serve --data /var/lib/chameleontak
+Restart=always
+RestartSec=3
+TimeoutStopSec=20
+
+# /var/lib/chameleontak tworzy i chownuje systemd (właściciel: chameleontak, 0750 - inni użytkownicy
+# nie zajrzą do kluczy/bazy). UMask celowo domyślny (0022): sudo łączy umask wywołującego ze swoim,
+# więc restrykcyjny UMask dawałby plikom pisanym przez `sys` (np. /etc/hosts) prawa 0640.
+StateDirectory=chameleontak
+StateDirectoryMode=0750
+
+# Porty < 1024 (80/443) bez roota.
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+LimitNOFILE=65536
+
+# --- Utwardzanie ---------------------------------------------------------------
+# Operacje roota idą przez `sudo /usr/local/bin/chameleontak sys …`. Proces sudo i jego dzieci
+# DZIEDZICZĄ przestrzeń nazw montowań, zbiór ograniczający capabilities i filtry seccomp tej
+# usługi, dlatego CELOWO NIE używamy:
+#   NoNewPrivileges        – blokuje setuid, czyli samo sudo,
+#   ProtectSystem / ProtectHome / ReadOnlyPaths
+#                          – pomocnik zapisuje /etc (firewall.nft, NetworkManager, hostname, shadow),
+#   CapabilityBoundingSet / PrivateDevices / ProtectClock / ProtectKernelTunables
+#                          – root przez sudo straciłby CAP_SYS_TIME, CAP_NET_ADMIN itd. (set-time, nft),
+#   ProtectHostname        – usługa nie widziałaby nowej nazwy hosta po `sys set-hostname`,
+#   RestrictSUIDSGID / MemoryDenyWriteExecute
+#                          – zbędne ryzyko dla narzędzi uruchamianych przez pomocnika.
+# Poniższe opcje nie przeszkadzają ani sudo, ani nmcli/nft/hostnamectl/timedatectl/chpasswd/systemctl.
+NoNewPrivileges=no
+PrivateTmp=yes
+ProtectControlGroups=yes
+ProtectKernelLogs=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+
+[Install]
+WantedBy=multi-user.target

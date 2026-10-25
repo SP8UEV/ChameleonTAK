@@ -1,0 +1,149 @@
+name: build
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  # Wywoływany też z image.yml (te same binarki trafiają do obrazu i do wydania).
+  workflow_call:
+    outputs:
+      version:
+        description: Wersja wbudowana w binarki (bez "v")
+        value: ${{ jobs.build.outputs.version }}
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  packaging:
+    name: Packaging (skrypty, sudoers, nftables)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Końce linii LF
+        run: |
+          if git grep -Il $'\r' -- packaging image scripts .github .gitattributes; then
+            echo "::error::Powyższe pliki mają końce linii CRLF (wymagane LF)"
+            exit 1
+          fi
+
+      - name: bash -n
+        run: |
+          for f in $(git ls-files '*.sh'); do
+            echo "bash -n $f"
+            bash -n "$f"
+          done
+
+      - name: shellcheck
+        run: |
+          command -v shellcheck >/dev/null || sudo apt-get install -y -q shellcheck
+          git ls-files -z '*.sh' | xargs -0 shellcheck -S warning
+
+      - name: sudoers (visudo -c)
+        run: sudo visudo -cf packaging/sudoers/chameleontak
+
+      - name: Plik usługi avahi (XML)
+        run: python3 -c 'import sys, xml.dom.minidom as m; m.parse(sys.argv[1])' packaging/avahi/chameleontak.service
+
+      - name: install-files.sh do katalogu tymczasowego + nft -c
+        run: |
+          command -v nft >/dev/null || sudo apt-get install -y -q nftables
+          root="$(mktemp -d)"
+          sudo bash packaging/install-files.sh --root "$root" --binary /bin/true --extra-tcp-ports 22
+          sudo find "$root" -type f -printf '%m %p\n' | sort -k2
+          test "$(sudo stat -c %a "$root/etc/sudoers.d/chameleontak")" = 440
+          sudo visudo -cf "$root/etc/sudoers.d/chameleontak"
+          grep -qF 'tcp dport { 22, 80, 443 } accept' "$root/etc/chameleontak/firewall.nft"
+          sudo nft -c -f "$root/etc/chameleontak/firewall.nft"
+          sed "s|/etc/chameleontak/firewall.nft|$root/etc/chameleontak/firewall.nft|" \
+            packaging/nftables/nftables.conf > "$root/nftables-test.conf"
+          sudo nft -c -f "$root/nftables-test.conf"
+          # Ponowne uruchomienie (aktualizacja) nie może nadpisać firewall.nft ani /etc/default/chameleontak.
+          echo "# zmiana" | sudo tee -a "$root/etc/chameleontak/firewall.nft" "$root/etc/default/chameleontak" >/dev/null
+          sudo bash packaging/install-files.sh --root "$root" --binary /bin/true
+          sudo grep -q '# zmiana' "$root/etc/chameleontak/firewall.nft"
+          sudo grep -q '# zmiana' "$root/etc/default/chameleontak"
+
+  build:
+    name: Build (web + Go)
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    env:
+      CGO_ENABLED: "0"
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Wersja
+        id: version
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            version="${GITHUB_REF_NAME#v}"
+          else
+            version="0.0.0-dev.$(git rev-parse --short=7 HEAD)"
+          fi
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "Wersja: ${version}"
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Panel WWW (web/ -> internal/panel/dist)
+        working-directory: web
+        run: |
+          npm ci
+          npm run build
+
+      - name: Sprawdź internal/panel/dist
+        run: |
+          test -d internal/panel/dist || { echo "::error::npm run build nie utworzył internal/panel/dist"; exit 1; }
+          ls -la internal/panel/dist
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go test
+        run: go test ./...
+
+      - name: Kompilacja (linux/arm64, linux/amd64, windows/amd64)
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          main_pkg="."
+          if [ -d cmd/chameleontak ]; then main_pkg="./cmd/chameleontak"; fi
+          mkdir -p dist
+          for target in linux/arm64 linux/amd64 windows/amd64; do
+            goos="${target%/*}"
+            goarch="${target#*/}"
+            ext=""
+            if [ "$goos" = windows ]; then ext=".exe"; fi
+            out="dist/chameleontak-${goos}-${goarch}${ext}"
+            echo "==> ${out}"
+            GOOS="$goos" GOARCH="$goarch" go build -trimpath \
+              -ldflags "-s -w -X main.version=${VERSION}" -o "$out" "$main_pkg"
+          done
+          ls -l dist
+
+      - name: Paczka plików systemowych (dla install.sh)
+        run: |
+          tar --owner=0 --group=0 --numeric-owner --mode='u+rwX,go+rX,go-w' \
+            -czf dist/chameleontak-packaging.tar.gz packaging
+          tar -tzf dist/chameleontak-packaging.tar.gz
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: chameleontak-binaries
+          path: dist/
+          if-no-files-found: error

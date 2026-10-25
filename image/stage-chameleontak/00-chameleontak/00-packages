@@ -1,0 +1,9 @@
+avahi-daemon
+nftables
+sudo
+network-manager
+dnsmasq-base
+ca-certificates
+rfkill
+iw
+curl

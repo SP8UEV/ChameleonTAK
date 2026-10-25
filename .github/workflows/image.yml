@@ -1,0 +1,131 @@
+name: image
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: "Runner (ubuntu-24.04-arm = natywne arm64 bez emulacji QEMU, kilka razy szybciej)"
+        type: choice
+        options:
+          - ubuntu-24.04
+          - ubuntu-24.04-arm
+        default: ubuntu-24.04
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    name: Binarki
+    uses: ./.github/workflows/build.yml
+
+  image:
+    name: Obraz Raspberry Pi (pi-gen, arm64, Trixie)
+    needs: build
+    runs-on: ${{ inputs.runner || 'ubuntu-24.04' }}
+    timeout-minutes: 360
+    env:
+      VERSION: ${{ needs.build.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: chameleontak-binaries
+          path: dist
+
+      - name: Etap pi-gen (binarka linux/arm64 + packaging/)
+        run: bash image/prepare-stage.sh dist/chameleontak-linux-arm64
+
+      # Wartości jak w image/config (budowanie lokalne) - przy zmianach aktualizuj oba miejsca.
+      - name: pi-gen
+        id: pigen
+        uses: usimd/pi-gen-action@v1
+        with:
+          pi-gen-repository: RPi-Distro/pi-gen
+          pi-gen-version: arm64
+          release: trixie
+          pi-gen-release: ChameleonTAK
+          image-name: chameleontak
+          stage-list: stage0 stage1 stage2 ${{ github.workspace }}/image/stage-chameleontak
+          export-last-stage-only: true
+          hostname: chameleontak
+          username: tak
+          password: chameleontak
+          disable-first-boot-user-rename: 1
+          enable-ssh: 0
+          locale: pl_PL.UTF-8
+          keyboard-keymap: pl
+          keyboard-layout: Polish
+          timezone: Europe/Warsaw
+          wpa-country: PL
+          enable-cloud-init: 1
+          compression: xz
+          compression-level: 6
+          increase-runner-disk-size: true
+          verbose-output: true
+
+      - name: Nazwa pliku obrazu
+        env:
+          IMAGE_PATH: ${{ steps.pigen.outputs.image-path }}
+        run: |
+          name="chameleontak-${VERSION}-arm64.img.xz"
+          mkdir -p out
+          echo "pi-gen: ${IMAGE_PATH}"
+          case "$IMAGE_PATH" in
+            *.img.xz) sudo cp "$IMAGE_PATH" "out/${name}" ;;
+            *.img) sudo xz -T0 -6 -c "$IMAGE_PATH" | tee "out/${name}" >/dev/null ;;
+            *) echo "::error::Nieoczekiwany wynik pi-gen: ${IMAGE_PATH}"; exit 1 ;;
+          esac
+          sudo chown "$(id -u):$(id -g)" "out/${name}"
+          xz -t "out/${name}"
+          ls -l out
+          sha256sum "out/${name}"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: chameleontak-image
+          path: out/
+          compression-level: 0
+          if-no-files-found: error
+
+  release:
+    name: Wydanie GitHub
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build, image]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: chameleontak-*
+          path: release
+          merge-multiple: true
+
+      - name: install.sh (z repozytorium i wersją tego wydania) + SHA256SUMS
+        run: |
+          sed -e "s|^DEFAULT_REPO=.*|DEFAULT_REPO=\"${GITHUB_REPOSITORY}\"|" \
+              -e "s|^DEFAULT_VERSION=.*|DEFAULT_VERSION=\"${GITHUB_REF_NAME}\"|" \
+              scripts/install.sh > release/install.sh
+          grep -qx "DEFAULT_REPO=\"${GITHUB_REPOSITORY}\"" release/install.sh
+          grep -qx "DEFAULT_VERSION=\"${GITHUB_REF_NAME}\"" release/install.sh
+          bash -n release/install.sh
+          cd release
+          sha256sum -- * > SHA256SUMS
+          cat SHA256SUMS
+
+      - uses: softprops/action-gh-release@v3
+        with:
+          files: release/*
+          fail_on_unmatched_files: true
+          generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}

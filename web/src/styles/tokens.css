@@ -1,0 +1,96 @@
+/* ChameleonTAK — tokeny projektu.
+   Kierunek: sprzęt polowy. Oliwkowy grafit nocą, szałwiowy papier mapy w dzień,
+   bursztyn sygnałowy jako jedyny akcent. Ścięty narożnik = „tabliczka sprzętowa”. */
+
+:root,
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #1d231c;
+  --bg-sunk: #161b15;
+  --surface: #252c23;
+  --surface-2: #2f3729;
+  --surface-3: #39422f;
+  --line: #3b4436;
+  --line-strong: #56614d;
+  --text: #e8e5d7;
+  --text-2: #b5b6a3;
+  --text-3: #8b8f7c;
+  --accent: #e9a93f;
+  --accent-strong: #f3bc5c;
+  --accent-ink: #20190a;
+  --accent-soft: rgba(233, 169, 63, 0.14);
+  --ok: #7fc781;
+  --ok-soft: rgba(127, 199, 129, 0.14);
+  --warn: #f1c94f;
+  --warn-soft: rgba(241, 201, 79, 0.14);
+  --danger: #ec7059;
+  --danger-soft: rgba(236, 112, 89, 0.14);
+  --info: #74bccb;
+  --info-soft: rgba(116, 188, 203, 0.14);
+  --overlay: rgba(10, 13, 9, 0.66);
+  --shadow-lift: 0 18px 40px -18px rgba(0, 0, 0, 0.7);
+  --map-bg: #2a3127;
+  --focus: #f3bc5c;
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+  --bg: #e8ebe2;
+  --bg-sunk: #dce0d4;
+  --surface: #f7f8f2;
+  --surface-2: #eceee5;
+  --surface-3: #e0e3d8;
+  --line: #cbd0c0;
+  --line-strong: #a7ae99;
+  --text: #1e251c;
+  --text-2: #4a5345;
+  --text-3: #6b7364;
+  --accent: #a8680a;
+  --accent-strong: #8f5806;
+  --accent-ink: #ffffff;
+  --accent-soft: rgba(168, 104, 10, 0.12);
+  --ok: #2e8738;
+  --ok-soft: rgba(46, 135, 56, 0.12);
+  --warn: #8d6400;
+  --warn-soft: rgba(196, 146, 0, 0.16);
+  --danger: #b63a25;
+  --danger-soft: rgba(182, 58, 37, 0.1);
+  --info: #1d7488;
+  --info-soft: rgba(29, 116, 136, 0.1);
+  --overlay: rgba(30, 37, 28, 0.45);
+  --shadow-lift: 0 18px 40px -20px rgba(30, 37, 28, 0.45);
+  --map-bg: #dfe3d6;
+  --focus: #a8680a;
+}
+
+:root {
+  --font-body: 'Barlow', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-head: 'Barlow Condensed', 'Barlow', system-ui, sans-serif;
+  --font-code: ui-monospace, 'Cascadia Mono', 'SF Mono', Menlo, Consolas, monospace;
+
+  /* Skala typograficzna (≈ kwarta 1.2 od 16 px) */
+  --fs-xs: 0.8125rem;
+  --fs-sm: 0.9375rem;
+  --fs-md: 1rem;
+  --fs-lg: 1.1875rem;
+  --fs-xl: 1.5rem;
+  --fs-2xl: 2rem;
+  --fs-3xl: 2.75rem;
+
+  --r-sm: 6px;
+  --r-md: 10px;
+  --notch: 14px;
+
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+  --sp-7: 48px;
+
+  --sidebar-w: 248px;
+  --topbar-h: 56px;
+  --bottombar-h: 64px;
+  --tap: 44px;
+}

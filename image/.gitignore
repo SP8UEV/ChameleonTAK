@@ -1,0 +1,6 @@
+# Wkładane przez CI / image/prepare-stage.sh przed budowaniem obrazu
+/stage-chameleontak/00-chameleontak/files/
+
+# Katalog roboczy i wynik image/build.sh
+/.build/
+/out/
