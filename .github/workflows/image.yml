@@ -43,6 +43,16 @@ jobs:
       - name: Etap pi-gen (binarka linux/arm64 + packaging/)
         run: bash image/prepare-stage.sh dist/chameleontak-linux-arm64
 
+      # Miejsce na dysku runnera zwalniamy sami: wbudowana opcja pi-gen-action robi `apt purge`
+      # na sztywnej liście pakietów i kończy się błędem (kod 100), gdy GitHub zmieni obraz runnera.
+      - name: Wolne miejsce na dysku
+        run: |
+          df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL \
+            /usr/local/share/boost /usr/local/share/powershell /usr/share/swift /usr/local/julia* || true
+          sudo docker system prune --all --force >/dev/null || true
+          df -h /
+
       # Wartości jak w image/config (budowanie lokalne) - przy zmianach aktualizuj oba miejsca.
       - name: pi-gen
         id: pigen
@@ -68,8 +78,23 @@ jobs:
           enable-cloud-init: 1
           compression: xz
           compression-level: 6
-          increase-runner-disk-size: true
+          increase-runner-disk-size: false
           verbose-output: true
+
+      # Przy błędzie: końcówka logu pi-gen jako publiczne adnotacje (logi Actions wymagają logowania).
+      - name: Diagnostyka pi-gen
+        if: failure() && steps.pigen.outcome == 'failure'
+        run: |
+          df -h / || true
+          log="$(sudo find / -xdev -name build.log -path '*deploy*' -newer "$GITHUB_WORKSPACE/go.mod" 2>/dev/null | head -1)"
+          if [ -z "$log" ]; then
+            echo "::error title=pi-gen::Nie znaleziono build.log - błąd wystąpił przed startem pi-gen"
+            exit 0
+          fi
+          echo "::error title=pi-gen log::$log"
+          sudo tail -n 25 "$log" | while IFS= read -r line; do
+            echo "::error title=pi-gen::${line}"
+          done
 
       - name: Nazwa pliku obrazu
         env:
