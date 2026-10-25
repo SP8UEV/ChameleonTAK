@@ -15,15 +15,6 @@ import (
 	"chameleontak/internal/cot"
 )
 
-func freePort(t *testing.T) int {
-	t.Helper()
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer ln.Close()
-	return ln.Addr().(*net.TCPAddr).Port
-}
 
 // newTestServer runs the setup and starts all services on free local ports.
 func newTestServer(t *testing.T) *App {
@@ -40,7 +31,7 @@ func newTestServer(t *testing.T) *App {
 	})
 	var req SetupRequest
 	req.ServerName = "127.0.0.1"
-	req.Ports = config.Ports{CoTTLS: freePort(t), CoTTCP: freePort(t), Marti: freePort(t), Enroll: freePort(t), HTTP: freePort(t), HTTPS: freePort(t)}
+	req.Ports = freePorts(t)
 	req.Admin.Username, req.Admin.Password = "admin", "supertajne"
 	req.Platforms = []string{"atak", "itak"}
 	req.Network.Mode = "lan"
@@ -52,13 +43,49 @@ func newTestServer(t *testing.T) *App {
 		t.Fatal(err)
 	}
 	app.cliMode = false
-	app.startServices()
-	for _, s := range app.listenerStates() {
-		if s.State == "error" {
-			t.Fatalf("listener %s: %s", s.Name, s.Error)
+	// A port probed as free can be handed out as an ephemeral source port before we bind it
+	// (common on Linux CI), so on a bind failure pick fresh ports and try again.
+	var failed string
+	for attempt := 0; attempt < 5; attempt++ {
+		if attempt > 0 {
+			ports := freePorts(t)
+			if _, err := app.cfg.Update(func(c *config.Config) error { c.Ports = ports; return nil }); err != nil {
+				t.Fatal(err)
+			}
 		}
+		app.startServices()
+		failed = ""
+		for _, s := range app.listenerStates() {
+			if s.State == "error" {
+				failed = s.Name + ": " + s.Error
+			}
+		}
+		if failed == "" {
+			return app
+		}
+		app.stopServices()
 	}
-	return app
+	t.Fatalf("listener %s", failed)
+	return nil
+}
+
+// freePorts reserves six distinct ports at once (so none is returned twice) and releases them.
+func freePorts(t *testing.T) config.Ports {
+	t.Helper()
+	var ps []int
+	var lns []net.Listener
+	for len(ps) < 6 {
+		ln, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		lns = append(lns, ln)
+		ps = append(ps, ln.Addr().(*net.TCPAddr).Port)
+	}
+	for _, ln := range lns {
+		ln.Close()
+	}
+	return config.Ports{CoTTLS: ps[0], CoTTCP: ps[1], Marti: ps[2], Enroll: ps[3], HTTP: ps[4], HTTPS: ps[5]}
 }
 
 // clientTLS issues a certificate for a new user/device and returns a TLS config using it.

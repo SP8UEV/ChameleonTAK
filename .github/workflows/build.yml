@@ -115,7 +115,19 @@ jobs:
         run: go vet ./...
 
       - name: go test
-        run: go test ./...
+        run: |
+          set -o pipefail
+          go test ./... 2>&1 | tee go-test.log
+
+      # Logi Actions wymagają zalogowania; adnotacje są publiczne (widać je też w API check-runs),
+      # więc przyczyna nieudanego testu jest czytelna bez dostępu do logów.
+      - name: Adnotacje nieudanych testów
+        if: failure()
+        run: |
+          [ -f go-test.log ] || exit 0
+          grep -E -- '--- FAIL|_test\.go:[0-9]+|panic:|^FAIL' go-test.log | head -40 | while IFS= read -r line; do
+            echo "::error title=go test::${line}"
+          done
 
       - name: Kompilacja (linux/arm64, linux/amd64, windows/amd64)
         env:
