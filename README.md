@@ -46,3 +46,7 @@ go run ./cmd/chameleontak serve --data ./devdata --http :8080 --https :8444
 
 - Architektura i kontrakt API: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 - Notatki o protokole TAK: [docs/research/](docs/research/).
+
+## Licencja
+
+ChameleonTAK jest udostępniany na licencji [GNU GPL v3.0](LICENSE).
