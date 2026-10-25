@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"hash/crc32"
 	"net/url"
@@ -31,30 +32,37 @@ type Params struct {
 	TrustP12  []byte // CA trust store
 }
 
-// NativeQR is the payload for the QR scanner built into the TAK app itself, or "" when that path
-// cannot work. ATAK and iTAK only enroll against a publicly trusted certificate on the enrollment
-// port (no trust prompt), so with our private CA they need the data package instead; TAKAware
-// accepts any certificate during enrollment.
-func NativeQR(platform string, cfg config.Config, username, token string) string {
-	if (platform == "atak" || platform == "itak") && !cfg.LetsEncrypt.Enabled {
-		return ""
-	}
+// NativeQR is the payload of the QR code meant for the TAK app (or the phone camera), or "" when
+// no such code can work for this platform and network setup.
+//
+//   - ATAK ≥ 5.1: tak://com.atakmap.app/import?url=… makes ATAK download and import the connection
+//     package itself (truststore, client certificate, preferences). It works with our private CA
+//     and over plain HTTP, so it is used in every network mode.
+//   - iTAK / TAKAware: their in-app enrollment only trusts a publicly trusted certificate on the
+//     enrollment port, so the registration QR is offered only with Let's Encrypt.
+func NativeQR(platform string, cfg config.Config, username, token, packageURL string) string {
 	switch platform {
-	case "atak":
-		// The host may carry the streaming port; the enrollment port always comes from the
-		// device setting (default 8446), so a custom enrollment port cannot be expressed here.
-		host := cfg.ServerName
-		if cfg.Ports.CoTTLS != 8089 {
-			host = fmt.Sprintf("%s:%d", host, cfg.Ports.CoTTLS)
+	case "atak", "wintak":
+		if platform == "wintak" || packageURL == "" {
+			return ""
 		}
-		q := url.Values{}
-		q.Set("host", host)
-		q.Set("username", username)
-		q.Set("token", token)
-		return "tak://com.atakmap.app/enroll?" + q.Encode()
+		return "tak://com.atakmap.app/import?url=" + url.QueryEscape(packageURL)
 	case "itak", "takaware":
-		// iTAK/TAKAware "Scan QR": description,host,port,protocol, then username/password are asked for.
-		return fmt.Sprintf("%s,%s,%d,ssl", strings.ReplaceAll(cfg.DisplayName, ",", " "), cfg.ServerName, cfg.Ports.CoTTLS)
+		if !cfg.LetsEncrypt.Enabled {
+			return ""
+		}
+		reg := map[string]any{
+			"passphrase": "false",
+			"type":       "registration",
+			"serverCredentials": map[string]string{
+				"connectionString": fmt.Sprintf("%s:%d:ssl", cfg.ServerName, cfg.Ports.CoTTLS),
+			},
+			"userCredentials": map[string]string{
+				"username": username, "password": token, "registrationId": newUUID(),
+			},
+		}
+		b, _ := json.Marshal(reg)
+		return string(b)
 	}
 	return ""
 }

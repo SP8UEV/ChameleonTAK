@@ -71,7 +71,10 @@ export function DeviceCard({
     }
   };
 
-  const nativeLabel = `Albo zeskanuj w aplikacji ${platformLabel(device.platform)}`;
+  const nativeLabel =
+    device.platform === 'atak'
+      ? 'Albo zeskanuj aparatem telefonu z ATAK (5.1+) — otworzy ATAK i sam zaimportuje konfigurację'
+      : `Albo zeskanuj w aplikacji ${platformLabel(device.platform)}`;
   const host = settings?.serverName ?? '';
   const port = settings?.ports.cotTls;
   const enrollPort = settings?.ports.enroll;

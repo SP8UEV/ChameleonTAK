@@ -95,7 +95,7 @@ func (a *App) deviceView(u *store.User, d *store.Device, online map[int64]bool) 
 			Token: t.Token, ExpiresAt: t.ExpiresAt, Used: !t.UsedAt.IsZero(), Valid: tokenUsable(t), JoinURL: join,
 			QR: map[string]string{
 				"join":   join,
-				"native": datapkg.NativeQR(d.Platform, cfg, u.Username, t.Token),
+				"native": datapkg.NativeQR(d.Platform, cfg, u.Username, t.Token, a.joinPackageURL(t.Token, d.Platform)),
 			},
 		}
 	}
@@ -649,7 +649,7 @@ func (a *App) hJoin(w http.ResponseWriter, r *http.Request) {
 			"platform":   p,
 			"label":      config.PlatformLabel(p),
 			"packageUrl": "/api/join/" + t.Token + "/package/" + p,
-			"nativeQr":   datapkg.NativeQR(p, cfg, u.Username, t.Token),
+			"nativeQr":   datapkg.NativeQR(p, cfg, u.Username, t.Token, a.joinPackageURL(t.Token, p)),
 			"manual": map[string]any{
 				"host": cfg.ServerName, "port": cfg.Ports.CoTTLS, "enrollPort": cfg.Ports.Enroll,
 				"username": u.Username, "password": t.Token,
@@ -677,6 +677,9 @@ func (a *App) hJoinPackage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	platform := r.PathValue("platform")
+	if file := r.PathValue("file"); file != "" {
+		platform = strings.TrimSuffix(file, ".zip")
+	}
 	if !config.ValidPlatform(platform) {
 		httpError(w, 400, "Nieznana platforma.")
 		return
@@ -689,4 +692,10 @@ func (a *App) hJoinPackage(w http.ResponseWriter, r *http.Request) {
 	_ = a.store.MarkTokenUsed(t.Token)
 	a.log.Info("pobrano paczkę konfiguracyjną", "user", u.Username, "platform", platform, "ip", clientIP(r), "ua", r.UserAgent())
 	sendZip(w, name, data)
+}
+
+// joinPackageURL is the address the TAK app downloads its package from (ATAK's import link
+// needs a URL ending in .zip). It uses the panel's own HTTP(S) address.
+func (a *App) joinPackageURL(token, platform string) string {
+	return a.panelBaseURL() + "/api/join/" + token + "/" + platform + ".zip"
 }

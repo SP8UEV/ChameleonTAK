@@ -121,6 +121,7 @@ func (a *App) apiMux() *http.ServeMux {
 	pub("GET /api/me", a.hMe)
 	pub("GET /api/join/{token}", a.hJoin)
 	pub("GET /api/join/{token}/package/{platform}", a.hJoinPackage)
+	pub("GET /api/join/{token}/{file}", a.hJoinPackage)
 	pub("GET /api/ca.pem", a.hCAPEM)
 	pub("GET /api/truststore.p12", a.hTrustStore)
 

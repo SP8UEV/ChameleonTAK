@@ -53,3 +53,20 @@ func TestPackagesUseClassicZipHeaders(t *testing.T) {
 		}
 	}
 }
+
+func TestNativeQR(t *testing.T) {
+	cfg := config.Default()
+	cfg.ServerName = "192.168.1.102"
+	got := NativeQR("atak", cfg, "jan", "ABCD1234", "http://192.168.1.102/api/join/ABCD1234/atak.zip")
+	want := "tak://com.atakmap.app/import?url=http%3A%2F%2F192.168.1.102%2Fapi%2Fjoin%2FABCD1234%2Fatak.zip"
+	if got != want {
+		t.Fatalf("ATAK import link:\n got %s\nwant %s", got, want)
+	}
+	if NativeQR("itak", cfg, "jan", "ABCD1234", "") != "" {
+		t.Fatal("iTAK registration QR must stay empty without a public certificate")
+	}
+	cfg.LetsEncrypt.Enabled = true
+	if q := NativeQR("itak", cfg, "jan", "ABCD1234", ""); !bytes.Contains([]byte(q), []byte(`"connectionString":"192.168.1.102:8089:ssl"`)) {
+		t.Fatalf("iTAK registration QR: %s", q)
+	}
+}

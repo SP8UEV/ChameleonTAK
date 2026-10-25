@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
-import { CircleCheck, Clock, Download, FolderOpen, KeyRound, LinkIcon, QrCode as QrIcon, Share, ShieldAlert, type LucideIcon } from 'lucide-react';
+import { CircleCheck, Clock, Download, ExternalLink, FolderOpen, KeyRound, LinkIcon, QrCode as QrIcon, Share, ShieldAlert, type LucideIcon } from 'lucide-react';
 import { api } from '../api/endpoints';
 import { errorMessage } from '../api/client';
 import type { JoinInfo, JoinOption, JoinValid, PlatformKey } from '../api/types';
@@ -19,17 +19,16 @@ function stepsFor(p: PlatformKey): { steps: Step[]; install: string } {
     case 'atak':
       return {
         steps: [
-          { icon: Download, text: <>Stuknij <strong>Pobierz konfigurację</strong>. Plik ZIP zapisze się w telefonie.</> },
+          { icon: ExternalLink, text: <>Stuknij <strong>Otwórz w ATAK</strong>. ATAK sam pobierze konfigurację — potwierdź import.</> },
+          { icon: CircleCheck, text: <>Gotowe. Po chwili połączenie w ATAK zaświeci się na zielono.</> },
           {
             icon: FolderOpen,
             text: (
               <>
-                Otwórz pobrany plik i wybierz <strong>ATAK</strong>. Jeśli telefon nie zapyta: w ATAK otwórz menu, potem{' '}
-                <strong>Import → Local SD</strong> i wskaż plik.
+                Starszy ATAK (przed 5.1)? Stuknij <strong>Pobierz plik</strong>, potem w ATAK: menu → <strong>Import</strong> → wskaż pobrany plik ZIP.
               </>
             ),
           },
-          { icon: CircleCheck, text: <>Gotowe. Po chwili połączenie w ATAK zaświeci się na zielono.</> },
         ],
         install: 'Nie masz ATAK? Zainstaluj „ATAK-CIV” ze Sklepu Google Play.',
       };
@@ -202,9 +201,20 @@ function JoinValidView({ info }: { info: JoinValid }) {
 
       {option && guide ? (
         <>
-          <a className="btn btn-primary join-btn" href={option.packageUrl} download>
-            <Download size={26} /> Pobierz konfigurację
-          </a>
+          {option.platform === 'atak' && option.nativeQr.startsWith('tak://') ? (
+            <>
+              <a className="btn btn-primary join-btn" href={option.nativeQr}>
+                <ExternalLink size={26} /> Otwórz w ATAK
+              </a>
+              <a className="btn btn-ghost" href={option.packageUrl} download>
+                <Download size={18} /> Pobierz plik
+              </a>
+            </>
+          ) : (
+            <a className="btn btn-primary join-btn" href={option.packageUrl} download>
+              <Download size={26} /> Pobierz konfigurację
+            </a>
+          )}
           <p className="xsmall muted join-for">{option.label}</p>
 
           <ol className="join-steps">
@@ -225,7 +235,9 @@ function JoinValidView({ info }: { info: JoinValid }) {
               <Disclosure title="Kod QR do zeskanowania w aplikacji" icon={<QrIcon size={18} />}>
                 <div className="stack-sm" style={{ alignItems: 'center', textAlign: 'center' }}>
                   <p className="small muted">
-                    Otwórz tę stronę na innym ekranie i zeskanuj kod w {platformLabel(option.platform)} (dodawanie serwera → skanuj QR).
+                    {option.platform === 'atak'
+                      ? 'Zeskanuj aparatem telefonu z ATAK — otworzy ATAK i zaimportuje konfigurację.'
+                      : `Otwórz tę stronę na innym ekranie i zeskanuj kod w ${platformLabel(option.platform)} (dodawanie serwera → skanuj QR).`}
                   </p>
                   <QrCode value={option.nativeQr} size={260} label="Kod QR dla aplikacji" />
                 </div>
