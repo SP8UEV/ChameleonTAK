@@ -149,13 +149,13 @@ Po zakończeniu serwer otwiera w zaporze ustawione porty i uruchamia usługi TAK
 Dla serwera z Debianem 12/13 albo Raspberry Pi OS **64-bit** (arm64 lub amd64) z systemd:
 
 ```sh
-curl -fsSL https://github.com/OWNER/chameleontak/releases/latest/download/install.sh | sudo bash
+curl -fsSL https://github.com/SP8UEV/ChameleonTAK/releases/latest/download/install.sh | sudo bash
 ```
 
 Na Raspberry Pi, które ma też korzystać z hotspotu kreatora, gdy nie ma sieci:
 
 ```sh
-curl -fsSL https://github.com/OWNER/chameleontak/releases/latest/download/install.sh | sudo bash -s -- --with-hotspot
+curl -fsSL https://github.com/SP8UEV/ChameleonTAK/releases/latest/download/install.sh | sudo bash -s -- --with-hotspot
 ```
 
 Z checkoutu repozytorium, z własnoręcznie zbudowaną binarką (bez pobierania czegokolwiek z wydań):
@@ -164,7 +164,7 @@ Z checkoutu repozytorium, z własnoręcznie zbudowaną binarką (bez pobierania 
 sudo ./scripts/install.sh --binary ./dist/chameleontak-linux-arm64
 ```
 
-(`OWNER/chameleontak` zastąp właściwym repozytorium; `install.sh` dołączony do wydania ma je już wpisane.)
+(`install.sh` dołączony do wydania ma już wpisane repozytorium `SP8UEV/ChameleonTAK`; inne podasz przez `--repo`.)
 
 | Opcja | Znaczenie |
 |---|---|

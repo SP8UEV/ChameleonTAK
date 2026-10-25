@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # ChameleonTAK - instalator dla istniejącego Debiana / Raspberry Pi OS (64-bit: arm64 lub amd64).
 #
-#   curl -fsSL https://github.com/OWNER/chameleontak/releases/latest/download/install.sh | sudo bash
-#   curl -fsSL https://github.com/OWNER/chameleontak/releases/latest/download/install.sh | sudo bash -s -- --with-hotspot
+#   curl -fsSL https://github.com/SP8UEV/ChameleonTAK/releases/latest/download/install.sh | sudo bash
+#   curl -fsSL https://github.com/SP8UEV/ChameleonTAK/releases/latest/download/install.sh | sudo bash -s -- --with-hotspot
 #   sudo ./scripts/install.sh --binary ./chameleontak-linux-arm64     # z checkoutu repozytorium
 #
 # Ponowne uruchomienie = aktualizacja w miejscu: podmienia binarkę i pliki systemowe,
@@ -28,7 +28,7 @@
 set -euo pipefail
 
 # Podmieniane przez CI przy publikacji wydania (.github/workflows/image.yml).
-DEFAULT_REPO="OWNER/chameleontak"
+DEFAULT_REPO="SP8UEV/ChameleonTAK"
 DEFAULT_VERSION="latest"
 
 readonly BIN_PATH="/usr/local/bin/chameleontak"

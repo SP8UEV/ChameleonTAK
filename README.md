@@ -33,7 +33,7 @@ Resztę (urząd certyfikacji, certyfikaty, usługi, zapora, sieć) serwer robi s
 Instalacja na istniejącym Debianie / Raspberry Pi OS:
 
 ```bash
-curl -fsSL https://github.com/OWNER/chameleontak/releases/latest/download/install.sh | sudo bash
+curl -fsSL https://github.com/SP8UEV/ChameleonTAK/releases/latest/download/install.sh | sudo bash
 ```
 
 ## Rozwój
