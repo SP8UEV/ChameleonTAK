@@ -189,9 +189,28 @@ func (a *App) mGetMission(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	a.martiJSON(w, 200, "Mission", []any{a.missionView(m, true)})
+	a.martiJSON(w, 200, "Mission", []any{a.missionView(m, a.canReadContents(callerOf(r), m))})
 }
 
+// loadReadable is loadMission plus the password check for mission contents.
+func (a *App) loadReadable(w http.ResponseWriter, r *http.Request) (*store.Mission, bool) {
+	m, ok := a.loadMission(w, r)
+	if ok && !a.canReadContents(callerOf(r), m) {
+		http.Error(w, "subscription required", http.StatusForbidden)
+		return nil, false
+	}
+	return m, ok
+}
+
+// loadWritable is loadMission plus the write permission check.
+func (a *App) loadWritable(w http.ResponseWriter, r *http.Request) (*store.Mission, bool) {
+	m, ok := a.loadMission(w, r)
+	if ok && !a.canWrite(callerOf(r), m) {
+		http.Error(w, "write permission required", http.StatusForbidden)
+		return nil, false
+	}
+	return m, ok
+}
 
 // createMission is shared by the Marti API and the panel.
 func (a *App) createMission(name, description, creatorUID, tool, password string, groups []string) (*store.Mission, error) {
@@ -231,14 +250,18 @@ func (a *App) mCreateMission(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "forbidden", 403)
 			return
 		}
-		a.martiJSON(w, 200, "Mission", []any{a.missionView(existing, true)})
+		a.martiJSON(w, 200, "Mission", []any{a.missionView(existing, a.canReadContents(caller, existing))})
 		return
 	}
-	groups := q["group"]
+	groups := a.allowedGroups(caller, q["group"])
 	if len(groups) == 0 {
-		groups = caller.User.Groups
+		groups = a.callerGroups(caller)
 	}
 	creator := q.Get("creatorUid")
+	if creator != "" && !a.ownsUID(caller, creator) {
+		http.Error(w, "creatorUid belongs to another user", 403)
+		return
+	}
 	m, err := a.createMission(name, q.Get("description"), creator, q.Get("tool"), q.Get("password"), groups)
 	if err != nil {
 		http.Error(w, err.Error(), 400)
@@ -263,8 +286,7 @@ func (a *App) mDeleteMission(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	caller := callerOf(r)
-	if !caller.User.IsAdmin && !a.isOwner(m, r.URL.Query().Get("creatorUid")) {
+	if a.missionRole(callerOf(r), m) != roleOwner {
 		http.Error(w, "forbidden", 403)
 		return
 	}
@@ -278,19 +300,8 @@ func (a *App) mDeleteMission(w http.ResponseWriter, r *http.Request) {
 	a.martiJSON(w, 200, "Mission", []any{view})
 }
 
-func (a *App) isOwner(m *store.Mission, clientUID string) bool {
-	if clientUID == "" {
-		return false
-	}
-	if m.CreatorUID == clientUID {
-		return true
-	}
-	sub, err := a.store.GetSubscription(m.Name, clientUID)
-	return err == nil && sub.Role == roleOwner
-}
-
 func (a *App) mMissionCoT(w http.ResponseWriter, r *http.Request) {
-	m, ok := a.loadMission(w, r)
+	m, ok := a.loadReadable(w, r)
 	if !ok {
 		return
 	}
@@ -321,7 +332,7 @@ func (a *App) changeJSON(m *store.Mission, c store.MissionChange) map[string]any
 }
 
 func (a *App) mMissionChanges(w http.ResponseWriter, r *http.Request) {
-	m, ok := a.loadMission(w, r)
+	m, ok := a.loadReadable(w, r)
 	if !ok {
 		return
 	}
@@ -347,7 +358,7 @@ func (a *App) mMissionChanges(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) mMissionLogs(w http.ResponseWriter, r *http.Request) {
-	m, ok := a.loadMission(w, r)
+	m, ok := a.loadReadable(w, r)
 	if !ok {
 		return
 	}
@@ -375,26 +386,41 @@ func (a *App) mSubscribe(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	uid := q.Get("uid")
 	if uid == "" {
-		uid = q.Get("clientUid")
+		uid = clientUIDParam(r)
 	}
 	if uid == "" {
 		http.Error(w, "uid required", 400)
 		return
 	}
-	if m.PasswordHash != "" && !caller.User.IsAdmin && !a.isOwner(m, uid) {
+	if !a.ownsUID(caller, uid) {
+		http.Error(w, "uid belongs to another user", 403)
+		return
+	}
+	isCreator := m.CreatorUID != "" && a.ownsUID(caller, m.CreatorUID)
+	existing := a.missionRole(caller, m)
+	if m.PasswordHash != "" && existing == "" && !isCreator {
 		if bcrypt.CompareHashAndPassword([]byte(m.PasswordHash), []byte(q.Get("password"))) != nil {
 			http.Error(w, "invalid password", 403)
 			return
 		}
 	}
 	role := m.DefaultRole
-	if m.CreatorUID == uid {
+	switch {
+	case isCreator:
 		role = roleOwner
+	case existing != "" && existing != roleOwner:
+		role = existing
+	}
+	if inv, ok := a.invitedRole(m.Name, uid); ok && roleRank[inv] > roleRank[role] {
+		role = inv
 	}
 	sub := &store.MissionSub{ClientUID: uid, Username: caller.User.Username, Role: role, Token: randomToken()}
 	if err := a.store.Subscribe(m.Name, sub); err != nil {
 		http.Error(w, err.Error(), 500)
 		return
+	}
+	if cur, err := a.store.GetSubscription(m.Name, uid); err == nil && roleRank[role] > roleRank[cur.Role] {
+		_ = a.store.SetSubscriptionRole(m.Name, uid, role)
 	}
 	_ = a.store.Uninvite(m.Name, uid)
 	saved, err := a.store.GetSubscription(m.Name, uid)
@@ -410,7 +436,12 @@ func (a *App) mGetSubscription(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	sub, err := a.store.GetSubscription(m.Name, r.URL.Query().Get("uid"))
+	uid := r.URL.Query().Get("uid")
+	if !a.ownsUID(callerOf(r), uid) {
+		http.Error(w, "forbidden", 403)
+		return
+	}
+	sub, err := a.store.GetSubscription(m.Name, uid)
 	if err != nil {
 		http.Error(w, "not subscribed", 404)
 		return
@@ -423,9 +454,16 @@ func (a *App) mUnsubscribe(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	uid := r.URL.Query().Get("uid")
-	if uid == "" {
-		uid = r.URL.Query().Get("clientUid")
+	q := r.URL.Query()
+	uid := firstNonEmpty(q.Get("uid"), clientUIDParam(r))
+	if !a.ownsUID(callerOf(r), uid) {
+		http.Error(w, "forbidden", 403)
+		return
+	}
+	// TAK defaults to disconnectOnly=true: an owner keeps the role when the device just leaves.
+	if sub, err := a.store.GetSubscription(m.Name, uid); err == nil && sub.Role == roleOwner && q.Get("disconnectOnly") != "false" {
+		w.WriteHeader(http.StatusOK)
+		return
 	}
 	_ = a.store.Unsubscribe(m.Name, uid)
 	w.WriteHeader(http.StatusOK)
@@ -458,7 +496,7 @@ func (a *App) mSubscriptionRoles(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) mAddContents(w http.ResponseWriter, r *http.Request) {
-	m, ok := a.loadMission(w, r)
+	m, ok := a.loadWritable(w, r)
 	if !ok {
 		return
 	}
@@ -483,9 +521,11 @@ func (a *App) mAddContents(w http.ResponseWriter, r *http.Request) {
 			a.notifyMissionChange(m, *c)
 		}
 	}
+	callerGroups := a.callerGroups(callerOf(r))
 	for _, uid := range in.UIDs {
-		// UIDs reference CoT already seen on the network; the latest SA/marker from the map is used.
-		if p := a.pos.Get(uid); p != nil {
+		// UIDs reference CoT already seen on the network; the latest SA/marker from the map is used,
+		// but only if its sender is visible to the caller (no copying across groups).
+		if p := a.pos.Get(uid); p != nil && (callerOf(r).User.IsAdmin || sharesGroup(p.groups, callerGroups)) {
 			if raw := a.pos.Raw(uid); raw != nil {
 				a.addMissionItem(m, uid, p.Type, p.Callsign, p.Lat, p.Lon, string(raw), creator)
 			}
@@ -495,7 +535,7 @@ func (a *App) mAddContents(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) mRemoveContents(w http.ResponseWriter, r *http.Request) {
-	m, ok := a.loadMission(w, r)
+	m, ok := a.loadWritable(w, r)
 	if !ok {
 		return
 	}
@@ -519,7 +559,7 @@ func (a *App) mRemoveContents(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) mSetKeywords(w http.ResponseWriter, r *http.Request) {
-	m, ok := a.loadMission(w, r)
+	m, ok := a.loadWritable(w, r)
 	if !ok {
 		return
 	}
@@ -535,7 +575,7 @@ func (a *App) mSetKeywords(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) mInvitations(w http.ResponseWriter, r *http.Request) {
-	uid := r.URL.Query().Get("clientUid")
+	uid := clientUIDParam(r)
 	if uid == "" {
 		uid = r.URL.Query().Get("uid")
 	}
@@ -547,7 +587,7 @@ func (a *App) mInvitations(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) mInvite(w http.ResponseWriter, r *http.Request) {
-	m, ok := a.loadMission(w, r)
+	m, ok := a.loadWritable(w, r)
 	if !ok {
 		return
 	}
@@ -561,6 +601,14 @@ func (a *App) mInvite(w http.ResponseWriter, r *http.Request) {
 	if role == "" {
 		role = m.DefaultRole
 	}
+	if roleRank[role] == 0 {
+		http.Error(w, "unknown role", 400)
+		return
+	}
+	if role == roleOwner && a.missionRole(callerOf(r), m) != roleOwner {
+		http.Error(w, "only owners can invite owners", 403)
+		return
+	}
 	creator := r.URL.Query().Get("creatorUid")
 	if err := a.store.Invite(m.Name, invitee, role, creator); err != nil {
 		http.Error(w, err.Error(), 500)
@@ -571,7 +619,7 @@ func (a *App) mInvite(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) mUninvite(w http.ResponseWriter, r *http.Request) {
-	m, ok := a.loadMission(w, r)
+	m, ok := a.loadWritable(w, r)
 	if !ok {
 		return
 	}
@@ -601,7 +649,7 @@ func (a *App) mAddLog(w http.ResponseWriter, r *http.Request) {
 	var last map[string]any
 	for _, name := range in.MissionNames {
 		m, err := a.store.GetMission(name)
-		if err != nil || !a.canSee(callerOf(r), m) {
+		if err != nil || !a.canWrite(callerOf(r), m) {
 			continue
 		}
 		if err := a.store.UpsertMissionLog(m.Name, &l); err != nil {
@@ -618,7 +666,22 @@ func (a *App) mAddLog(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) mDeleteLog(w http.ResponseWriter, r *http.Request) {
-	_ = a.store.DeleteMissionLog(r.PathValue("id"))
+	id := r.PathValue("id")
+	names, _ := a.store.MissionLogMissions(id)
+	deleted := 0
+	for _, name := range names {
+		m, err := a.store.GetMission(name)
+		if err != nil || !a.canWrite(callerOf(r), m) {
+			continue
+		}
+		if err := a.store.DeleteMissionLog(id, m.Name); err == nil {
+			deleted++
+		}
+	}
+	if deleted == 0 && len(names) > 0 {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -626,8 +689,8 @@ func (a *App) mDeleteLog(w http.ResponseWriter, r *http.Request) {
 
 // missionCoT stores an event addressed to a mission and returns the subscribers to deliver it to.
 func (a *App) missionCoT(c *stream.Client, ev *cot.Event, name string) []string {
-	m, err := a.store.GetMission(name)
-	if err != nil {
+	m, ok := a.streamWritable(c, name)
+	if !ok {
 		return nil
 	}
 	subs, _ := a.store.Subscriptions(m.Name)
@@ -641,8 +704,8 @@ func (a *App) missionCoT(c *stream.Client, ev *cot.Event, name string) []string 
 // storeMissionCoT persists an event addressed to a mission; it runs after the event was relayed so
 // subscribers see the item before the change notification.
 func (a *App) storeMissionCoT(c *stream.Client, ev *cot.Event, name string) {
-	m, err := a.store.GetMission(name)
-	if err != nil {
+	m, ok := a.streamWritable(c, name)
+	if !ok {
 		return
 	}
 	if ev.IsDelete() {

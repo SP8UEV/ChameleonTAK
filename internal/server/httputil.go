@@ -75,6 +75,10 @@ func xmlEscape(s string) string {
 }
 
 func readJSON(r *http.Request, v any) error {
+	// A JSON content type cannot be sent by a plain HTML form, which closes the "simple request" CSRF path.
+	if !strings.HasPrefix(strings.ToLower(r.Header.Get("Content-Type")), "application/json") {
+		return invalid("Oczekiwano danych JSON (Content-Type: application/json).")
+	}
 	dec := json.NewDecoder(io.LimitReader(r.Body, 1<<20))
 	if err := dec.Decode(v); err != nil {
 		return invalid("Niepoprawne dane: " + err.Error())

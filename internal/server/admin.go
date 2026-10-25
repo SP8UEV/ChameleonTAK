@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"reflect"
 	"strings"
 	"time"
 
@@ -149,7 +150,7 @@ func (a *App) applyNetwork(mode, wifiSSID, wifiPass, hsSSID, hsPass string) erro
 }
 
 // applyFirewall opens exactly the ports the server uses.
-func (a *App) applyFirewall(ssh bool) error {
+func (a *App) applyFirewall() error {
 	if !a.helper.Available() {
 		return system.ErrUnsupported
 	}
@@ -158,7 +159,7 @@ func (a *App) applyFirewall(ssh bool) error {
 	if cfg.Ports.CoTTCPEnabled {
 		ports = append(ports, cfg.Ports.CoTTCP)
 	}
-	if ssh {
+	if cfg.SSHEnabled {
 		ports = append(ports, 22)
 	}
 	var s []string
@@ -285,6 +286,9 @@ func (a *App) hPutSettings(w http.ResponseWriter, r *http.Request) {
 		c.ServerName, c.DisplayName, c.Organization = cur.ServerName, strings.TrimSpace(cur.DisplayName), strings.TrimSpace(cur.Organization)
 		c.Ports, c.Platforms = cur.Ports, cur.Platforms
 		c.CertValidityDays, c.TokenValidityHours, c.CertPassword = cur.CertValidityDays, cur.TokenValidityHours, cur.CertPassword
+		if !reflect.DeepEqual(normalizeProfile(c.Profile), normalizeProfile(cur.Profile)) {
+			c.ProfileUpdatedAt = time.Now().UTC()
+		}
 		c.ForceHTTPS, c.LetsEncrypt, c.Profile, c.MapTileURL = cur.ForceHTTPS, cur.LetsEncrypt, cur.Profile, strings.TrimSpace(cur.MapTileURL)
 		if c.DisplayName == "" {
 			c.DisplayName = "ChameleonTAK"
@@ -316,7 +320,7 @@ func (a *App) hPutSettings(w http.ResponseWriter, r *http.Request) {
 				a.restartHTTP()
 			}
 			if portsChanged {
-				if err := a.applyFirewall(false); err != nil && err != system.ErrUnsupported {
+				if err := a.applyFirewall(); err != nil && err != system.ErrUnsupported {
 					a.log.Error("firewall", "err", err)
 				}
 			}
@@ -373,6 +377,7 @@ func (a *App) hUpdateGroup(w http.ResponseWriter, r *http.Request) {
 		Name        *string `json:"name"`
 		Description *string `json:"description"`
 	}
+	oldName := ""
 	if err := readJSON(r, &in); err != nil {
 		fail(w, err)
 		return
@@ -383,6 +388,7 @@ func (a *App) hUpdateGroup(w http.ResponseWriter, r *http.Request) {
 			fail(w, invalid("Niepoprawna nazwa grupy."))
 			return
 		}
+		oldName = g.Name
 		g.Name = n
 	}
 	if in.Description != nil {
@@ -391,6 +397,11 @@ func (a *App) hUpdateGroup(w http.ResponseWriter, r *http.Request) {
 	if err := a.store.UpdateGroup(g); err != nil {
 		fail(w, invalid("Grupa o tej nazwie już istnieje."))
 		return
+	}
+	if oldName != "" && !strings.EqualFold(oldName, g.Name) {
+		if err := a.store.RenameGroupInMissions(oldName, g.Name); err != nil {
+			a.log.Error("zmiana nazwy grupy w misjach", "err", err)
+		}
 	}
 	a.refreshAllGroups()
 	writeJSON(w, 200, map[string]any{"id": g.ID, "name": g.Name, "description": g.Description})
@@ -527,4 +538,12 @@ func (a *App) hRevokeCert(w http.ResponseWriter, r *http.Request) {
 	}
 	a.router.DisconnectWhere(func(cl *streamClient) bool { return cl.Identity.CertSerial == serial })
 	writeJSON(w, 200, map[string]bool{"ok": true})
+}
+
+// normalizeProfile treats a nil and an empty extraPrefs map as equal when comparing profiles.
+func normalizeProfile(p config.Profile) config.Profile {
+	if p.ExtraPrefs == nil {
+		p.ExtraPrefs = map[string]string{}
+	}
+	return p
 }

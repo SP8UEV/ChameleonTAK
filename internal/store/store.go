@@ -125,10 +125,41 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("schemat misji: %w", err)
 	}
-	return &Store{db: db}, nil
+	s := &Store{db: db}
+	if err := s.migrate(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migracja bazy: %w", err)
+	}
+	return s, nil
 }
 
 func (s *Store) Close() error { return s.db.Close() }
+
+// migrate adds columns introduced after the first release to existing databases.
+func (s *Store) migrate() error {
+	cols := map[string]bool{}
+	rows, err := s.db.Query(`PRAGMA table_info(users)`)
+	if err != nil {
+		return err
+	}
+	for rows.Next() {
+		var cid, notnull, pk int
+		var name, typ string
+		var dflt any
+		if err := rows.Scan(&cid, &name, &typ, &notnull, &dflt, &pk); err != nil {
+			rows.Close()
+			return err
+		}
+		cols[name] = true
+	}
+	rows.Close()
+	if !cols["profile_at"] {
+		if _, err := s.db.Exec(`ALTER TABLE users ADD COLUMN profile_at INTEGER NOT NULL DEFAULT 0`); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
 // DB exposes the handle for backups (VACUUM INTO).
 func (s *Store) DB() *sql.DB { return s.db }
@@ -192,18 +223,20 @@ type User struct {
 	Disabled     bool
 	CreatedAt    time.Time
 	Groups       []string
+	ProfileAt    time.Time // last change of callsign/team/role (pushed to devices on connect)
 }
 
-const userCols = `id, username, password_hash, is_admin, callsign, team, role, disabled, created_at`
+const userCols = `id, username, password_hash, is_admin, callsign, team, role, disabled, created_at, profile_at`
 
 func scanUser(sc interface{ Scan(...any) error }) (*User, error) {
 	var u User
 	var admin, disabled int
-	var created int64
-	if err := sc.Scan(&u.ID, &u.Username, &u.PasswordHash, &admin, &u.Callsign, &u.Team, &u.Role, &disabled, &created); err != nil {
+	var created, profileAt int64
+	if err := sc.Scan(&u.ID, &u.Username, &u.PasswordHash, &admin, &u.Callsign, &u.Team, &u.Role, &disabled, &created, &profileAt); err != nil {
 		return nil, err
 	}
 	u.IsAdmin, u.Disabled, u.CreatedAt = admin == 1, disabled == 1, ts(created)
+	u.ProfileAt = ts(profileAt)
 	return &u, nil
 }
 
@@ -219,7 +252,10 @@ func (s *Store) CreateUser(u *User) error {
 }
 
 func (s *Store) UpdateUser(u *User) error {
-	_, err := s.db.Exec(`UPDATE users SET username=?, password_hash=?, is_admin=?, callsign=?, team=?, role=?, disabled=? WHERE id=?`,
+	_, err := s.db.Exec(`UPDATE users SET
+		profile_at = CASE WHEN callsign<>? OR team<>? OR role<>? THEN ? ELSE profile_at END,
+		username=?, password_hash=?, is_admin=?, callsign=?, team=?, role=?, disabled=? WHERE id=?`,
+		u.Callsign, u.Team, u.Role, now(),
 		u.Username, u.PasswordHash, b2i(u.IsAdmin), u.Callsign, u.Team, u.Role, b2i(u.Disabled), u.ID)
 	return err
 }
@@ -670,7 +706,8 @@ func scanFile(sc interface{ Scan(...any) error }) (*File, error) {
 	return &f, nil
 }
 
-// UpsertFile stores file metadata; re-uploading the same content refreshes name/keywords.
+// UpsertFile stores file metadata. Re-uploading identical content only refreshes name/keywords:
+// the original uploader, UID and visibility stay (no ownership takeover by re-upload).
 func (s *Store) UpsertFile(f *File) error {
 	if f.Keywords == nil {
 		f.Keywords = []string{}
@@ -680,8 +717,7 @@ func (s *Store) UpsertFile(f *File) error {
 		f.CreatedAt = time.Now().UTC()
 	}
 	_, err := s.db.Exec(`INSERT INTO files(`+fileCols+`) VALUES(?,?,?,?,?,?,?,?,?,?)
-		ON CONFLICT(hash) DO UPDATE SET uid=excluded.uid, name=excluded.name, mime=excluded.mime, keywords=excluded.keywords,
-		creator_uid=excluded.creator_uid, submitter=excluded.submitter, tool=excluded.tool`,
+		ON CONFLICT(hash) DO UPDATE SET name=excluded.name, mime=excluded.mime, keywords=excluded.keywords`,
 		f.Hash, f.UID, f.Name, f.MIME, f.Size, string(kw), f.CreatorUID, f.Submitter, f.Tool, unix(f.CreatedAt))
 	return err
 }
@@ -809,4 +845,13 @@ func (s *Store) DeletePosition(uid string) error {
 func (s *Store) PrunePositions(before time.Time) error {
 	_, err := s.db.Exec(`DELETE FROM positions WHERE last_seen < ?`, unix(before))
 	return err
+}
+
+// DeviceByClientUID returns the device that reported the given CoT UID.
+func (s *Store) DeviceByClientUID(uid string) (*Device, error) {
+	d, err := scanDevice(s.db.QueryRow(`SELECT `+deviceCols+` FROM devices WHERE client_uid=? AND client_uid<>'' LIMIT 1`, uid))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	return d, err
 }

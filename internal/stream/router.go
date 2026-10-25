@@ -123,6 +123,10 @@ func (c *Client) writeLoop() {
 				c.Close()
 				return
 			}
+			// A drained queue means the client keeps up; forget earlier bursts.
+			if len(c.out) == 0 {
+				c.drops.Store(0)
+			}
 		}
 	}
 }
@@ -239,6 +243,16 @@ func (r *Router) Handle(c *Client, ev *cot.Event) {
 		return
 	}
 
+	// A UID belongs to whoever reports it as their own position. Another user's connection may
+	// neither take it over nor publish events under it (spoofing, kicking the victim offline).
+	r.mu.RLock()
+	holder, held := r.sa[ev.UID]
+	r.mu.RUnlock()
+	if held && holder.client != c && !sameOwner(holder.client, c) {
+		r.log.Warn("odrzucono zdarzenie z cudzym UID", "uid", ev.UID, "user", c.Identity.Username, "owner", holder.client.Identity.Username)
+		return
+	}
+
 	if ev.IsSA() {
 		c.mu.Lock()
 		first := c.uid == ""
@@ -286,35 +300,35 @@ func (r *Router) Handle(c *Client, ev *cot.Event) {
 
 func (r *Router) deliverDirect(from *Client, ev *cot.Event) {
 	targets := map[*Client]bool{}
-	var callsigns, uids map[string]bool
+	callsigns, uids, missionUIDs := map[string]bool{}, map[string]bool{}, map[string]bool{}
 	for _, d := range ev.Dest {
 		switch {
 		case d.Mission != "":
 			for _, uid := range r.hooks.MissionEvent(from, ev, d.Mission) {
-				if uids == nil {
-					uids = map[string]bool{}
-				}
-				uids[uid] = true
+				missionUIDs[uid] = true
 			}
 		case d.UID != "":
-			if uids == nil {
-				uids = map[string]bool{}
-			}
 			uids[d.UID] = true
 		case d.Callsign != "":
-			if callsigns == nil {
-				callsigns = map[string]bool{}
-			}
 			callsigns[d.Callsign] = true
 		}
 	}
+	fromGroups := from.Groups()
 	r.mu.RLock()
 	for _, c := range r.clients {
 		if c == from {
 			continue
 		}
-		if uids[c.UID()] || callsigns[c.Callsign()] {
+		uid := c.UID()
+		switch {
+		case missionUIDs[uid]:
+			// Mission subscribers were authorized when they subscribed.
 			targets[c] = true
+		case uids[uid] || callsigns[c.Callsign()]:
+			// Direct messages still respect group isolation.
+			if shareGroup(fromGroups, c.Groups()) {
+				targets[c] = true
+			}
 		}
 	}
 	r.mu.RUnlock()
@@ -478,4 +492,10 @@ func itoa(n int64) string {
 		n /= 10
 	}
 	return string(b[i:])
+}
+
+// sameOwner reports whether two connections belong to the same account (a device reconnecting).
+// Anonymous TCP clients only match each other.
+func sameOwner(a, b *Client) bool {
+	return a.Identity.UserID == b.Identity.UserID
 }

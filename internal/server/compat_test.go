@@ -109,3 +109,44 @@ func newCSR(t *testing.T) string {
 	p = strings.Replace(p, "-----BEGIN CERTIFICATE REQUEST-----", "", 1)
 	return strings.Replace(p, "-----END CERTIFICATE REQUEST-----", "", 1)
 }
+
+func TestProfilePushedAfterPanelChange(t *testing.T) {
+	app := newTestServer(t)
+	cfg := clientTLS(t, app, "kasia", nil)
+	cl := httpsClient(app, cfg.Certificates...)
+	url := martiURL(app, app.cfg.Get().Ports.Marti, "/Marti/api/device/profile/connection?syncSecago=60&clientUid=X")
+	get := func() (int, []byte) {
+		resp, err := cl.Get(url)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		b, _ := io.ReadAll(resp.Body)
+		return resp.StatusCode, b
+	}
+	if code, _ := get(); code != 204 {
+		t.Fatalf("unchanged profile: expected 204, got %d", code)
+	}
+	u, _ := app.store.GetUserByName("kasia")
+	u.Team = "Red"
+	if err := app.store.UpdateUser(u); err != nil {
+		t.Fatal(err)
+	}
+	code, body := get()
+	if code != 200 || !bytes.HasPrefix(body, []byte("PK")) {
+		t.Fatalf("changed profile: expected zip, got %d", code)
+	}
+	zr, _ := zip.NewReader(bytes.NewReader(body), int64(len(body)))
+	found := false
+	for _, f := range zr.File {
+		if strings.HasSuffix(f.Name, ".pref") {
+			rc, _ := f.Open()
+			raw, _ := io.ReadAll(rc)
+			rc.Close()
+			found = strings.Contains(string(raw), ">Red<")
+		}
+	}
+	if !found {
+		t.Fatal("profile does not carry the new team")
+	}
+}

@@ -17,6 +17,17 @@ import (
 
 var ErrUnsupported = errors.New("operacja systemowa niedostępna na tym hoście")
 
+// ErrLocked: the action is only allowed during the first-time setup.
+var ErrLocked = errors.New("operacja dozwolona tylko podczas pierwszej konfiguracji (wymaga dostępu do konsoli)")
+
+// LockFile marks a finished setup; it is created by root and cannot be removed by the service.
+const LockFile = "/etc/chameleontak/setup-locked"
+
+func locked() bool {
+	_, err := os.Stat(LockFile)
+	return err == nil
+}
+
 const (
 	FirewallFile    = "/etc/chameleontak/firewall.nft"
 	CaptiveConf     = "/etc/NetworkManager/dnsmasq-shared.d/chameleontak-captive.conf"
@@ -189,12 +200,23 @@ func RunSys(args []string, stdin io.Reader) error {
 		}
 		return run("nmcli", "connection", "up", conn)
 
+	case "lock":
+		// Root-owned marker: once present, the service account can no longer set the password of
+		// the sudo-capable "tak" account or open SSH (it would otherwise be a path to full root).
+		if err := os.MkdirAll("/etc/chameleontak", 0o755); err != nil {
+			return err
+		}
+		return os.WriteFile(LockFile, []byte(time.Now().UTC().Format(time.RFC3339)+"\n"), 0o644)
+
 	case "ssh":
 		if err := need(1); err != nil {
 			return err
 		}
 		switch rest[0] {
 		case "enable":
+			if locked() {
+				return ErrLocked
+			}
 			return run("systemctl", "enable", "--now", "ssh")
 		case "disable":
 			return run("systemctl", "disable", "--now", "ssh")
@@ -207,6 +229,9 @@ func RunSys(args []string, stdin io.Reader) error {
 		}
 		if rest[0] != systemLoginUser {
 			return errors.New("można zmienić hasło tylko konta tak")
+		}
+		if locked() {
+			return ErrLocked
 		}
 		pw, err := secret()
 		if err != nil {
@@ -278,7 +303,7 @@ func validSSID(s string) error {
 		return errors.New("SSID musi mieć 1–32 znaki")
 	}
 	for _, r := range s {
-		if r < 0x20 || r == 0x7f || r == ';' || r == '\\' || r == '[' || r == ']' || r == '=' {
+		if r < 0x20 || r == 0x7f || r == ';' {
 			return errors.New("SSID zawiera niedozwolone znaki")
 		}
 	}
@@ -300,16 +325,16 @@ func validPSK(pw string) error {
 func wifiKeyfile(ssid, pw string) string {
 	sec := ""
 	if pw != "" {
-		sec = "\n[wifi-security]\nkey-mgmt=wpa-psk\npsk=" + pw + "\n"
+		sec = "\n[wifi-security]\nkey-mgmt=wpa-psk\npsk=" + kfEscape(pw) + "\n"
 	}
-	return "[connection]\nid=" + WifiConn + "\ntype=wifi\nautoconnect=true\nautoconnect-priority=10\n\n[wifi]\nmode=infrastructure\nssid=" + ssid + "\n" +
+	return "[connection]\nid=" + WifiConn + "\ntype=wifi\nautoconnect=true\nautoconnect-priority=10\n\n[wifi]\nmode=infrastructure\nssid=" + kfEscape(ssid) + "\n" +
 		sec + "\n[ipv4]\nmethod=auto\n\n[ipv6]\nmethod=auto\n"
 }
 
 func hotspotKeyfile(ssid, pw string) string {
 	return "[connection]\nid=" + HotspotConn + "\ntype=wifi\ninterface-name=wlan0\nautoconnect=true\nautoconnect-priority=100\n\n" +
-		"[wifi]\nmode=ap\nssid=" + ssid + "\nband=bg\n\n" +
-		"[wifi-security]\nkey-mgmt=wpa-psk\npsk=" + pw + "\nproto=rsn\npairwise=ccmp\ngroup=ccmp\n\n" +
+		"[wifi]\nmode=ap\nssid=" + kfEscape(ssid) + "\nband=bg\n\n" +
+		"[wifi-security]\nkey-mgmt=wpa-psk\npsk=" + kfEscape(pw) + "\nproto=rsn\npairwise=ccmp\ngroup=ccmp\n\n" +
 		"[ipv4]\nmethod=shared\naddress1=" + HotspotGateway + "/24\n\n[ipv6]\nmethod=ignore\n"
 }
 
@@ -346,4 +371,14 @@ func run(name string, args ...string) error {
 		return fmt.Errorf("%s: %v: %s", name, err, strings.TrimSpace(string(out)))
 	}
 	return nil
+}
+
+// kfEscape escapes a value for a GLib key file (NetworkManager keyfile): backslashes and a
+// leading space would otherwise be interpreted and change the SSID or password.
+func kfEscape(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\`)
+	if strings.HasPrefix(s, " ") {
+		s = `\s` + s[1:]
+	}
+	return s
 }

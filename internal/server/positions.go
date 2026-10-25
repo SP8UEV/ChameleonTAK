@@ -32,6 +32,8 @@ type Position struct {
 	LastSeen time.Time `json:"lastSeen"`
 	Stale    time.Time `json:"stale"`
 	Remarks  string    `json:"remarks"`
+
+	groups []string // groups of the client that sent it (not exported)
 }
 
 type Positions struct {
@@ -112,6 +114,7 @@ func (p *Positions) expireMarkers() {
 	for uid, pos := range p.items {
 		if pos.Kind == "marker" && !pos.Stale.IsZero() && pos.Stale.Before(now) {
 			delete(p.items, uid)
+			delete(p.raw, uid)
 			removed = append(removed, uid)
 		}
 	}
@@ -131,7 +134,7 @@ func isMapItem(ev *cot.Event) bool {
 }
 
 // Update records an event from a connected client.
-func (p *Positions) Update(ev *cot.Event, username string, isOwnSA bool) {
+func (p *Positions) Update(ev *cot.Event, username string, isOwnSA bool, groups []string) {
 	if ev.IsDelete() {
 		for _, l := range ev.Links {
 			p.Remove(l.UID)
@@ -144,7 +147,7 @@ func (p *Positions) Update(ev *cot.Event, username string, isOwnSA bool) {
 	pos := &Position{
 		UID: ev.UID, Callsign: ev.Callsign, Type: ev.Type, Lat: ev.Lat, Lon: ev.Lon, Hae: ev.Hae,
 		Course: ev.Course, Speed: ev.Speed, Team: ev.GroupName, Role: ev.GroupRole,
-		LastSeen: time.Now().UTC(), Stale: ev.Stale, Remarks: ev.Remarks, Kind: "marker",
+		LastSeen: time.Now().UTC(), Stale: ev.Stale, Remarks: ev.Remarks, Kind: "marker", groups: groups,
 	}
 	if isOwnSA {
 		pos.Kind, pos.Online, pos.Username = "contact", true, username
@@ -158,8 +161,15 @@ func (p *Positions) Update(ev *cot.Event, username string, isOwnSA bool) {
 		p.mu.Unlock()
 		return
 	}
+	if _, known := p.items[ev.UID]; !known && len(p.items) >= maxMapItems {
+		p.evictOldestMarker()
+	}
 	p.items[ev.UID] = pos
-	p.raw[ev.UID] = ev.Raw
+	if len(ev.Raw) <= maxRawCoT {
+		p.raw[ev.UID] = ev.Raw
+	} else {
+		delete(p.raw, ev.UID)
+	}
 	p.dirty[ev.UID] = true
 	p.mu.Unlock()
 	p.hub.Publish("position", pos)
@@ -187,6 +197,7 @@ func (p *Positions) Remove(uid string) {
 	p.mu.Lock()
 	_, ok := p.items[uid]
 	delete(p.items, uid)
+	delete(p.raw, uid)
 	delete(p.dirty, uid)
 	p.mu.Unlock()
 	if ok {
@@ -204,4 +215,26 @@ func (p *Positions) List() []Position {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Callsign < out[j].Callsign })
 	return out
+}
+
+// Bounds that keep a misbehaving or malicious client from exhausting memory on a small Pi.
+const (
+	maxMapItems = 5000
+	maxRawCoT   = 64 << 10
+)
+
+// evictOldestMarker drops the least recently seen marker (contacts are kept). Caller holds p.mu.
+func (p *Positions) evictOldestMarker() {
+	oldest := ""
+	var at time.Time
+	for uid, pos := range p.items {
+		if pos.Kind == "marker" && (oldest == "" || pos.LastSeen.Before(at)) {
+			oldest, at = uid, pos.LastSeen
+		}
+	}
+	if oldest != "" {
+		delete(p.items, oldest)
+		delete(p.raw, oldest)
+		delete(p.dirty, oldest)
+	}
 }

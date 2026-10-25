@@ -205,3 +205,17 @@ func randomUUID() string {
 	t := randomToken()
 	return fmt.Sprintf("%s-%s-4%s-a%s-%s", t[0:8], t[8:12], t[13:16], t[17:20], t[20:32])
 }
+
+// isZip reports whether a stored file starts with the ZIP local-header signature.
+func (a *App) isZip(hash string) bool {
+	f, err := os.Open(a.filePath(hash))
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+	sig := make([]byte, 4)
+	if _, err := io.ReadFull(f, sig); err != nil {
+		return false
+	}
+	return string(sig) == "PK\x03\x04"
+}

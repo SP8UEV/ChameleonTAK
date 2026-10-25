@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"net"
 	"net/http"
+	"net/url"
 	"path"
 	"strconv"
 	"strings"
@@ -48,6 +49,10 @@ func (a *App) panelHandler(isTLS bool) http.Handler {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("X-Frame-Options", "DENY")
 		if strings.HasPrefix(r.URL.Path, "/api/") {
+			if !sameOriginWrite(r) {
+				httpError(w, http.StatusForbidden, "Żądanie z innej strony zostało zablokowane.")
+				return
+			}
 			api.ServeHTTP(w, r)
 			return
 		}
@@ -305,4 +310,23 @@ func (a *App) panelBaseURL() string {
 		host += ":" + port
 	}
 	return "http://" + host
+}
+
+// sameOriginWrite blocks cross-site state changes (CSRF): browsers label the request with
+// Sec-Fetch-Site and/or Origin, which must point at the panel itself.
+func sameOriginWrite(r *http.Request) bool {
+	switch r.Method {
+	case http.MethodGet, http.MethodHead, http.MethodOptions:
+		return true
+	}
+	if site := r.Header.Get("Sec-Fetch-Site"); site != "" && site != "same-origin" && site != "none" {
+		return false
+	}
+	if origin := r.Header.Get("Origin"); origin != "" {
+		u, err := url.Parse(origin)
+		if err != nil || !strings.EqualFold(u.Host, r.Host) {
+			return false
+		}
+	}
+	return true
 }

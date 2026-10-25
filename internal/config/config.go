@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"sync"
+	"time"
 )
 
 type Ports struct {
@@ -53,6 +54,8 @@ type Config struct {
 	LetsEncrypt        LetsEncrypt `json:"letsEncrypt"`
 	Profile            Profile     `json:"profile"`
 	MapTileURL         string      `json:"mapTileUrl"`
+	SSHEnabled         bool        `json:"sshEnabled"`
+	ProfileUpdatedAt   time.Time   `json:"profileUpdatedAt"` // last change of the device profile settings
 	Network            Network     `json:"network"`
 }
 

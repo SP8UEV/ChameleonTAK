@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/crypto/acme"
 	"golang.org/x/crypto/acme/autocert"
 
 	"chameleontak/internal/config"
@@ -64,6 +65,7 @@ type App struct {
 	acme      *autocert.Manager
 	acmeHost  string
 	missionMu sync.Mutex
+	svcMu     sync.Mutex // serializes start/stop of the TAK listeners
 }
 
 func New(opts Options, log *slog.Logger) (*App, error) {
@@ -165,12 +167,19 @@ func (a *App) startHTTP() error {
 	if err != nil {
 		return fmt.Errorf("panel HTTP %s: %w", addr, err)
 	}
-	var h http.Handler = a.panelHandler(false)
-	if m := a.acmeManager(); m != nil {
-		h = m.HTTPHandler(h)
-	}
+	base := a.panelHandler(false)
+	// The ACME manager is looked up per request, so enabling Let's Encrypt or renaming the server
+	// takes effect without a restart.
+	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if m, _ := a.acmeFor(); m != nil {
+			m.HTTPHandler(base).ServeHTTP(w, r)
+			return
+		}
+		base.ServeHTTP(w, r)
+	})
 	srv := &http.Server{Handler: h, ReadHeaderTimeout: 15 * time.Second}
 	a.mu.Lock()
+	old := a.httpSrv
 	a.httpSrv, a.httpAddr = srv, addr
 	a.mu.Unlock()
 	go func() {
@@ -178,36 +187,35 @@ func (a *App) startHTTP() error {
 			a.log.Error("panel HTTP", "err", err)
 		}
 	}()
-	a.log.Info("panel WWW (HTTP)", "addr", addr)
-	return nil
-}
-
-// restartHTTP moves the plain-HTTP panel to a new port (called after the response was sent).
-func (a *App) restartHTTP() {
-	a.mu.Lock()
-	old := a.httpSrv
-	a.mu.Unlock()
 	if old != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		_ = old.Shutdown(ctx)
 		cancel()
 	}
+	a.log.Info("panel WWW (HTTP)", "addr", addr)
+	return nil
+}
+
+// restartHTTP moves the plain-HTTP panel to a new port (called after the response was sent).
+// The new port is bound before the old server stops, so a busy port leaves the panel reachable.
+func (a *App) restartHTTP() {
 	if err := a.startHTTP(); err != nil {
-		a.log.Error("restart panelu HTTP", "err", err)
+		a.log.Error("restart panelu HTTP — panel zostaje na starym porcie", "err", err)
 	}
 }
 
 func (a *App) tlsConfig(auth tls.ClientAuthType, acme bool) *tls.Config {
 	getCert := a.pki.GetCertificate
-	if m := a.acmeManager(); acme && m != nil {
-		host := a.acmeHost
+	protos := []string{"http/1.1"}
+	if acme {
+		protos = append(protos, acmeALPN)
 		getCert = func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
-			if strings.EqualFold(hello.ServerName, host) {
-				if c, err := m.GetCertificate(hello); err == nil {
+			if m, host := a.acmeFor(); m != nil && strings.EqualFold(hello.ServerName, host) {
+				c, err := m.GetCertificate(hello)
+				if err == nil {
 					return c, nil
-				} else {
-					a.log.Warn("Let's Encrypt", "err", err)
 				}
+				a.log.Warn("Let's Encrypt", "err", err)
 			}
 			return a.pki.GetCertificate(hello)
 		}
@@ -218,7 +226,7 @@ func (a *App) tlsConfig(auth tls.ClientAuthType, acme bool) *tls.Config {
 		GetCertificate: getCert,
 		ClientAuth:     auth,
 		ClientCAs:      a.pki.CAPool(),
-		NextProtos:     []string{"http/1.1"},
+		NextProtos:     protos,
 	}
 }
 
@@ -236,8 +244,12 @@ var tlsCipherSuites = []uint16{
 	tls.TLS_RSA_WITH_AES_256_CBC_SHA,
 }
 
+// startServices (re)starts every TAK listener; calls are serialized so two quick settings saves
+// cannot leak listeners.
 func (a *App) startServices() {
-	a.stopServices()
+	a.svcMu.Lock()
+	defer a.svcMu.Unlock()
+	a.stopServicesLocked()
 	cfg := a.cfg.Get()
 	var closers []func()
 	var states []ListenerState
@@ -281,6 +293,12 @@ func (a *App) startServices() {
 }
 
 func (a *App) stopServices() {
+	a.svcMu.Lock()
+	defer a.svcMu.Unlock()
+	a.stopServicesLocked()
+}
+
+func (a *App) stopServicesLocked() {
 	a.mu.Lock()
 	closers := a.closers
 	a.closers, a.states = nil, nil
@@ -319,10 +337,11 @@ func (a *App) serveTLS(addr string, h http.Handler, cfg *tls.Config) (func(), er
 }
 
 // acmeManager returns a Let's Encrypt manager when it is enabled and the server name is a public domain.
-func (a *App) acmeManager() *autocert.Manager {
+// acmeFor returns the Let's Encrypt manager and its host name when LE is enabled for a public domain.
+func (a *App) acmeFor() (*autocert.Manager, string) {
 	cfg := a.cfg.Get()
 	if !cfg.SetupDone || !cfg.LetsEncrypt.Enabled || !IsPublicDomain(cfg.ServerName) {
-		return nil
+		return nil, ""
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -335,7 +354,7 @@ func (a *App) acmeManager() *autocert.Manager {
 		}
 		a.acmeHost = cfg.ServerName
 	}
-	return a.acme
+	return a.acme, a.acmeHost
 }
 
 // IsPublicDomain reports whether name is a DNS name that Let's Encrypt could issue for.
@@ -446,3 +465,6 @@ func (a *App) maintenance(ctx context.Context) {
 		}
 	}
 }
+
+// acmeALPN lets Let's Encrypt validate over TLS (tls-alpn-01) on the HTTPS/enrollment ports.
+const acmeALPN = acme.ALPNProto

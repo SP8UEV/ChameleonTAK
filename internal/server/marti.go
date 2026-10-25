@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -110,6 +112,8 @@ func (a *App) martiHandler() http.Handler {
 	m.HandleFunc("PUT /Marti/api/sync/metadata/{hash}/tool", a.mSyncMetadataTool)
 	m.HandleFunc("PUT /Marti/api/sync/metadata/{hash}/keywords", a.mSyncMetadataKeywords)
 	m.HandleFunc("DELETE /Marti/api/files/{hash}", a.mDeleteFile)
+	m.HandleFunc("GET /Marti/api/files/metadata", a.mFilesMetadata)
+	m.HandleFunc("GET /Marti/api/files/{hash}", a.mFileByHash)
 	m.HandleFunc("DELETE /Marti/sync/delete", a.mDeleteFileQuery)
 
 	a.registerMissionRoutes(m)
@@ -208,7 +212,7 @@ func (a *App) mSignClient(w http.ResponseWriter, r *http.Request) {
 	if caller.Token != nil {
 		_ = a.store.MarkTokenUsed(caller.Token.Token)
 	}
-	if uid := r.URL.Query().Get("clientUid"); uid != "" && deviceID > 0 {
+	if uid := clientUIDParam(r); uid != "" && deviceID > 0 {
 		_ = a.store.TouchDevice(deviceID, uid)
 	}
 	a.log.Info("wydano certyfikat (enrollment)", "user", caller.User.Username, "device", deviceID, "serial", pki.SerialHex(cert), "client", r.URL.Query().Get("version"))
@@ -251,7 +255,7 @@ func (a *App) enrollmentDevice(c *martiCaller, r *http.Request) (int64, error) {
 		return c.DeviceID, nil
 	}
 	platform := guessPlatform(r.URL.Query().Get("version") + " " + r.UserAgent())
-	uid := r.URL.Query().Get("clientUid")
+	uid := clientUIDParam(r)
 	devs, err := a.store.ListDevices(c.User.ID)
 	if err != nil {
 		return 0, err
@@ -307,8 +311,25 @@ func (a *App) mProfileEnrollment(w http.ResponseWriter, r *http.Request) {
 	sendZip(w, "profile.zip", zip)
 }
 
+// mProfileConnection pushes the profile again when callsign/team/role or the global profile
+// settings changed since the device last synced (syncSecago = seconds since its last sync).
 func (a *App) mProfileConnection(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusNoContent)
+	caller := callerOf(r)
+	secs, err := strconv.ParseInt(r.URL.Query().Get("syncSecago"), 10, 64)
+	if err != nil || secs <= 0 {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	lastSync := time.Now().Add(-time.Duration(secs) * time.Second)
+	changed := caller.User.ProfileAt
+	if g := a.cfg.Get().ProfileUpdatedAt; g.After(changed) {
+		changed = g
+	}
+	if !changed.After(lastSync) {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	a.mProfileEnrollment(w, r)
 }
 
 // ---------- server info ----------
@@ -328,8 +349,10 @@ func (a *App) mVersionConfig(w http.ResponseWriter, r *http.Request) {
 
 func (a *App) mClientEndpoints(w http.ResponseWriter, r *http.Request) {
 	var out []map[string]any
+	caller := callerOf(r)
+	mine := a.callerGroups(caller)
 	for _, c := range a.router.Clients() {
-		if c.UID == "" {
+		if c.UID == "" || (!caller.User.IsAdmin && !sharesGroup(c.Groups, mine)) {
 			continue
 		}
 		out = append(out, map[string]any{
@@ -365,7 +388,7 @@ func (a *App) mGroups(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if r.URL.Query().Get("sendLatestSA") == "true" {
-		if c := a.router.ClientByUID(r.URL.Query().Get("clientUid")); c != nil {
+		if c := a.router.ClientByUID(clientUIDParam(r)); c != nil {
 			a.router.ReplaySA(c)
 		}
 	}
@@ -470,6 +493,14 @@ func (a *App) mSyncUpload(w http.ResponseWriter, r *http.Request) {
 	for _, k := range q["keywords"] {
 		kw = append(kw, strings.Split(k, ",")...)
 	}
+	// iTAK uploads data packages as raw zips without an extension: detect them by content.
+	if filepath.Ext(name) == "" && a.isZip(hash) {
+		name += ".zip"
+		mimeType = "application/x-zip-compressed"
+		if !hasKeyword(kw, "missionpackage") {
+			kw = append(kw, "missionpackage")
+		}
+	}
 	rec := &store.File{
 		Hash: hash, UID: randomUUID(), Name: name, MIME: guessMIME(name, mimeType), Size: size, Keywords: kw,
 		CreatorUID: firstNonEmpty(q.Get("creatorUid"), q.Get("CreatorUid")), Submitter: caller.User.Username, Tool: "public",
@@ -501,7 +532,63 @@ func (a *App) mSyncContent(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "not found", 404)
 		return
 	}
+	// ATAK resumes interrupted downloads with ?offset=N; translate it into a Range request.
+	if off, err := strconv.ParseInt(q.Get("offset"), 10, 64); err == nil && off > 0 && off < f.Size && r.Header.Get("Range") == "" {
+		r.Header.Set("Range", fmt.Sprintf("bytes=%d-", off))
+	}
 	a.serveStoredFile(w, r, f)
+}
+
+// mFilesMetadata is TAK Server's file manager listing, used by TAKAware. All values are strings.
+func (a *App) mFilesMetadata(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	onlyPackages := q.Get("missionPackage") == "true"
+	name := strings.ToLower(q.Get("name"))
+	groups := strings.Join(a.callerGroups(callerOf(r)), ",")
+	files, err := a.store.ListFiles()
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	out := []map[string]string{}
+	for _, f := range files {
+		if f.Tool == "private" {
+			continue
+		}
+		if onlyPackages && !hasKeyword(f.Keywords, "missionpackage") {
+			continue
+		}
+		if name != "" && !strings.Contains(strings.ToLower(f.Name), name) {
+			continue
+		}
+		out = append(out, map[string]string{
+			"Name": f.Name, "User": f.Submitter, "Creator": f.CreatorUID, "Size": humanSize(f.Size),
+			"Time": f.CreatedAt.Format(time.RFC3339), "MimeType": f.MIME, "Keywords": strings.Join(f.Keywords, ","),
+			"Expiration": "none", "Hash": f.Hash, "Groups": groups,
+		})
+	}
+	a.martiJSON(w, 200, "Files", out)
+}
+
+func (a *App) mFileByHash(w http.ResponseWriter, r *http.Request) {
+	f, err := a.store.GetFile(strings.ToLower(r.PathValue("hash")))
+	if err != nil {
+		http.Error(w, "not found", 404)
+		return
+	}
+	a.serveStoredFile(w, r, f)
+}
+
+func humanSize(n int64) string {
+	switch {
+	case n >= 1<<30:
+		return fmt.Sprintf("%.1fGB", float64(n)/(1<<30))
+	case n >= 1<<20:
+		return fmt.Sprintf("%.1fMB", float64(n)/(1<<20))
+	case n >= 1<<10:
+		return fmt.Sprintf("%dkB", n>>10)
+	}
+	return fmt.Sprintf("%dB", n)
 }
 
 func (a *App) fileByUID(uid string) (*store.File, error) {
@@ -544,6 +631,10 @@ func (a *App) mSyncSearch(w http.ResponseWriter, r *http.Request) {
 		if tool == "" && f.Tool == "private" {
 			continue
 		}
+		// Private files (sent to a contact) are only listed for their uploader.
+		if f.Tool == "private" && !a.ownsFile(callerOf(r), f) {
+			continue
+		}
 		if keyword != "" && !hasKeyword(f.Keywords, keyword) && !strings.Contains(strings.ToLower(f.Name), keyword) {
 			continue
 		}
@@ -567,6 +658,9 @@ func hasKeyword(kw []string, k string) bool {
 
 func (a *App) mSyncMetadataTool(w http.ResponseWriter, r *http.Request) {
 	hash := strings.ToLower(r.PathValue("hash"))
+	if !a.requireFileOwner(w, r, hash) {
+		return
+	}
 	body, _ := io.ReadAll(io.LimitReader(r.Body, 256))
 	tool := strings.TrimSpace(string(body))
 	if tool == "" {
@@ -584,6 +678,9 @@ func (a *App) mSyncMetadataTool(w http.ResponseWriter, r *http.Request) {
 
 func (a *App) mSyncMetadataKeywords(w http.ResponseWriter, r *http.Request) {
 	hash := strings.ToLower(r.PathValue("hash"))
+	if !a.requireFileOwner(w, r, hash) {
+		return
+	}
 	var kw []string
 	body, _ := io.ReadAll(io.LimitReader(r.Body, 64<<10))
 	if err := remarshalBytes(body, &kw); err != nil {
@@ -616,7 +713,7 @@ func (a *App) deleteOwnFile(w http.ResponseWriter, r *http.Request, hash string)
 		http.Error(w, "not found", 404)
 		return
 	}
-	if !caller.User.IsAdmin && f.Submitter != caller.User.Username {
+	if !a.ownsFile(caller, f) {
 		http.Error(w, "forbidden", 403)
 		return
 	}
@@ -625,4 +722,28 @@ func (a *App) deleteOwnFile(w http.ResponseWriter, r *http.Request, hash string)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
+}
+
+// ownsFile: the uploader (first submitter) or an admin.
+func (a *App) ownsFile(c *martiCaller, f *store.File) bool {
+	return c.User.IsAdmin || f.Submitter == c.User.Username
+}
+
+func (a *App) requireFileOwner(w http.ResponseWriter, r *http.Request, hash string) bool {
+	f, err := a.store.GetFile(hash)
+	if err != nil {
+		http.Error(w, "not found", 404)
+		return false
+	}
+	if !a.ownsFile(callerOf(r), f) {
+		http.Error(w, "forbidden", 403)
+		return false
+	}
+	return true
+}
+
+// clientUIDParam accepts both spellings clients use (clientUid, clientUID).
+func clientUIDParam(r *http.Request) string {
+	q := r.URL.Query()
+	return firstNonEmpty(q.Get("clientUid"), q.Get("clientUID"))
 }

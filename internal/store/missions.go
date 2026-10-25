@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"strings"
 	"time"
 )
 
@@ -79,14 +80,15 @@ CREATE TABLE IF NOT EXISTS mission_invites (
 );
 
 CREATE TABLE IF NOT EXISTS mission_logs (
-  id TEXT PRIMARY KEY,
+  id TEXT NOT NULL,
   mission TEXT NOT NULL REFERENCES missions(name) ON DELETE CASCADE ON UPDATE CASCADE,
   content TEXT NOT NULL DEFAULT '',
   creator_uid TEXT NOT NULL DEFAULT '',
   entry_uid TEXT NOT NULL DEFAULT '',
   dtg INTEGER NOT NULL DEFAULT 0,
   keywords TEXT NOT NULL DEFAULT '[]',
-  created_at INTEGER NOT NULL
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (id, mission)
 );
 `
 
@@ -480,14 +482,32 @@ func (s *Store) UpsertMissionLog(mission string, l *MissionLog) error {
 		l.CreatedAt = time.Now().UTC()
 	}
 	_, err := s.db.Exec(`INSERT INTO mission_logs(id, mission, content, creator_uid, entry_uid, dtg, keywords, created_at) VALUES(?,?,?,?,?,?,?,?)
-		ON CONFLICT(id) DO UPDATE SET content=excluded.content, entry_uid=excluded.entry_uid, dtg=excluded.dtg, keywords=excluded.keywords`,
+		ON CONFLICT(id, mission) DO UPDATE SET content=excluded.content, entry_uid=excluded.entry_uid, dtg=excluded.dtg, keywords=excluded.keywords`,
 		l.ID, mission, l.Content, l.CreatorUID, l.EntryUID, unix(l.DTG), jsonList(l.Keywords), unix(l.CreatedAt))
 	return err
 }
 
-func (s *Store) DeleteMissionLog(id string) error {
-	_, err := s.db.Exec(`DELETE FROM mission_logs WHERE id=?`, id)
+func (s *Store) DeleteMissionLog(id, mission string) error {
+	_, err := s.db.Exec(`DELETE FROM mission_logs WHERE id=? AND mission=?`, id, mission)
 	return err
+}
+
+// MissionLogMissions lists the missions a log entry id belongs to.
+func (s *Store) MissionLogMissions(id string) ([]string, error) {
+	rows, err := s.db.Query(`SELECT mission FROM mission_logs WHERE id=?`, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var m string
+		if err := rows.Scan(&m); err != nil {
+			return nil, err
+		}
+		out = append(out, m)
+	}
+	return out, rows.Err()
 }
 
 func (s *Store) MissionLogs(mission string) ([]MissionLog, error) {
@@ -509,4 +529,36 @@ func (s *Store) MissionLogs(mission string) ([]MissionLog, error) {
 		out = append(out, l)
 	}
 	return out, rows.Err()
+}
+
+// InviteRole returns the role a client was invited with.
+func (s *Store) InviteRole(mission, clientUID string) (string, error) {
+	var role string
+	err := s.db.QueryRow(`SELECT role FROM mission_invites WHERE mission=? AND client_uid=?`, mission, clientUID).Scan(&role)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", ErrNotFound
+	}
+	return role, err
+}
+
+// RenameGroupInMissions keeps mission access lists in step with a renamed group.
+func (s *Store) RenameGroupInMissions(oldName, newName string) error {
+	ms, err := s.ListMissions()
+	if err != nil {
+		return err
+	}
+	for _, m := range ms {
+		changed := false
+		for i, g := range m.Groups {
+			if strings.EqualFold(g, oldName) {
+				m.Groups[i], changed = newName, true
+			}
+		}
+		if changed {
+			if err := s.UpdateMission(m); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }

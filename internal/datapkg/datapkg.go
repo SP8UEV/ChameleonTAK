@@ -106,6 +106,8 @@ func identityPrefs(p Params) []entry {
 		out = append(out, str("atakRoleType", role))
 	}
 	out = append(out, boolean("displayServerConnectionWidget", true))
+	// ATAK asks the server for an updated profile on every connect (changes made in the panel).
+	out = append(out, boolean("deviceProfileEnableOnConnect", true))
 	keys := make([]string, 0, len(cfg.Profile.ExtraPrefs))
 	for k := range cfg.Profile.ExtraPrefs {
 		keys = append(keys, k)

@@ -32,7 +32,7 @@ func (a *App) OnEvent(c *stream.Client, ev *cot.Event) {
 	if ownSA && c.Identity.DeviceID > 0 {
 		_ = a.store.TouchDevice(c.Identity.DeviceID, ev.UID)
 	}
-	a.pos.Update(ev, c.Identity.Username, ownSA)
+	a.pos.Update(ev, c.Identity.Username, ownSA, c.Groups())
 	for _, d := range ev.Dest {
 		if d.Mission != "" {
 			a.storeMissionCoT(c, ev, d.Mission)

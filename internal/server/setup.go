@@ -342,7 +342,15 @@ func (a *App) RunSetup(req SetupRequest, job *setupJob) error {
 	}
 
 	if err := step("firewall", func() (string, error) {
-		return "", a.applyFirewall(req.SSH.Enabled)
+		if _, err := a.cfg.Update(func(c *config.Config) error { c.SSHEnabled = req.SSH.Enabled; return nil }); err != nil {
+			return "", err
+		}
+		err := a.applyFirewall()
+		// Account and SSH changes are a setup-only privilege; lock them now (best effort).
+		if lerr := a.helper.Run("", "lock"); lerr != nil && !errors.Is(lerr, system.ErrUnsupported) {
+			a.log.Warn("blokada pomocnika", "err", lerr)
+		}
+		return "", err
 	}); err != nil {
 		return err
 	}
