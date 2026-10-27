@@ -53,6 +53,7 @@ type App struct {
 	helper  *system.Helper
 	limiter *limiter
 	logs    *logRing
+	public  *publicCerts
 
 	started time.Time
 	setup   *setupJob
@@ -107,6 +108,7 @@ func New(opts Options, log *slog.Logger) (*App, error) {
 	}
 	a.pos = NewPositions(st, a.hub)
 	a.router = stream.NewRouter(log, a)
+	a.public = newPublicCerts(a)
 	return a, nil
 }
 
@@ -134,6 +136,7 @@ func (a *App) Run(ctx context.Context) error {
 
 	go a.pos.Run(ctx)
 	go a.maintenance(ctx)
+	go a.public.run(ctx)
 
 	<-ctx.Done()
 	a.stopServices()
@@ -170,23 +173,34 @@ func (a *App) panelHTTPSAddr() string {
 	return ":" + strconv.Itoa(a.cfg.Get().Ports.HTTPS)
 }
 
-func (a *App) startHTTP() error {
-	addr := a.panelHTTPAddr()
-	ln, err := net.Listen("tcp", addr)
-	if err != nil {
-		return fmt.Errorf("panel HTTP %s: %w", addr, err)
-	}
+// httpHandler serves the plain-HTTP port: Let's Encrypt's HTTP-01 challenges, then the panel.
+func (a *App) httpHandler() http.Handler {
 	base := a.panelHandler(false)
 	// The ACME manager is looked up per request, so enabling Let's Encrypt or renaming the server
 	// takes effect without a restart.
-	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if token, ok := strings.CutPrefix(r.URL.Path, "/.well-known/acme-challenge/"); ok {
+			if keyAuth, ok := a.public.challenge(token); ok {
+				w.Header().Set("Content-Type", "text/plain")
+				_, _ = w.Write([]byte(keyAuth))
+				return
+			}
+		}
 		if m, _ := a.acmeFor(); m != nil {
 			m.HTTPHandler(base).ServeHTTP(w, r)
 			return
 		}
 		base.ServeHTTP(w, r)
 	})
-	srv := &http.Server{Handler: h, ReadHeaderTimeout: 15 * time.Second}
+}
+
+func (a *App) startHTTP() error {
+	addr := a.panelHTTPAddr()
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		return fmt.Errorf("panel HTTP %s: %w", addr, err)
+	}
+	srv := &http.Server{Handler: a.httpHandler(), ReadHeaderTimeout: 15 * time.Second}
 	a.mu.Lock()
 	old := a.httpSrv
 	a.httpSrv, a.httpAddr = srv, addr
@@ -225,6 +239,12 @@ func (a *App) tlsConfig(auth tls.ClientAuthType, acme bool) *tls.Config {
 					return c, nil
 				}
 				a.log.Warn("Let's Encrypt", "err", err)
+			}
+			// Clients that dial an IP address send no server name (SNI).
+			if ip := a.publicIPHost(); ip != "" && (hello.ServerName == "" || hello.ServerName == ip) {
+				if c := a.public.forIP(ip); c != nil {
+					return c, nil
+				}
 			}
 			return a.pki.GetCertificate(hello)
 		}

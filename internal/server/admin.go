@@ -243,6 +243,20 @@ func validateServerName(s string) error {
 	return nil
 }
 
+// validateLetsEncrypt checks that Let's Encrypt can issue for the server name.
+func validateLetsEncrypt(serverName string, le config.LetsEncrypt) error {
+	if !le.Enabled {
+		return nil
+	}
+	if accessMode(config.Config{ServerName: serverName}) == "local" {
+		return invalid("Let's Encrypt wymaga publicznej domeny albo publicznego adresu IP (nie adresu z sieci lokalnej).")
+	}
+	if le.Email != "" && !strings.Contains(le.Email, "@") {
+		return invalid("Niepoprawny adres e-mail dla Let's Encrypt.")
+	}
+	return nil
+}
+
 func (a *App) hPutSettings(w http.ResponseWriter, r *http.Request) {
 	var in map[string]any
 	if err := readJSON(r, &in); err != nil {
@@ -287,6 +301,10 @@ func (a *App) hPutSettings(w http.ResponseWriter, r *http.Request) {
 		fail(w, invalid("Hasło paczek certyfikatów musi mieć min. 4 znaki."))
 		return
 	}
+	if err := validateLetsEncrypt(cur.ServerName, cur.LetsEncrypt); err != nil {
+		fail(w, err)
+		return
+	}
 	newCfg, err := a.cfg.Update(func(c *config.Config) error {
 		c.ServerName, c.DisplayName, c.Organization = cur.ServerName, strings.TrimSpace(cur.DisplayName), strings.TrimSpace(cur.Organization)
 		c.Ports, c.Platforms = cur.Ports, cur.Platforms
@@ -316,6 +334,9 @@ func (a *App) hPutSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	portsChanged := newCfg.Ports != old.Ports
 	restart := newCfg.SetupDone && (portsChanged || newCfg.LetsEncrypt != old.LetsEncrypt || newCfg.ServerName != old.ServerName)
+	if newCfg.LetsEncrypt != old.LetsEncrypt || newCfg.ServerName != old.ServerName {
+		a.public.wake()
+	}
 	writeJSON(w, 200, map[string]any{"settings": settingsView(newCfg), "restarted": restart, "certsRegenerated": regen})
 	if restart {
 		go func() {

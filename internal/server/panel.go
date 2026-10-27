@@ -119,6 +119,7 @@ func (a *App) apiMux() *http.ServeMux {
 	pub("POST /api/login", a.hLogin)
 	pub("POST /api/logout", a.hLogout)
 	pub("GET /api/me", a.hMe)
+	pub("GET /api/setup/public-ip", a.hDetectPublicIP)
 	pub("GET /api/join/{token}", a.hJoin)
 	pub("GET /api/join/{token}/package/{platform}", a.hJoinPackage)
 	pub("GET /api/join/{token}/{file}", a.hJoinPackage)
@@ -129,6 +130,8 @@ func (a *App) apiMux() *http.ServeMux {
 	adm("GET /api/settings", a.hGetSettings)
 	adm("PUT /api/settings", a.hPutSettings)
 	adm("GET /api/system", a.hSystem)
+	adm("GET /api/system/public-access", a.hPublicAccess)
+	adm("GET /api/system/public-ip", a.hDetectPublicIP)
 	adm("POST /api/system/reboot", a.hReboot)
 	adm("POST /api/system/network", a.hNetwork)
 	adm("GET /api/system/backup", a.hBackup)
@@ -302,22 +305,17 @@ func (a *App) panelBaseURL() string {
 // codes, ATAK's import link). Phones trust only public CAs, and ATAK's downloader rejects our own
 // CA, so HTTPS is used only with a Let's Encrypt certificate and plain HTTP otherwise; the
 // package sits behind a single-use token. host is the name the phone already reached the server
-// by ("" means the configured server name); with Let's Encrypt it must be the server name.
+// by ("" means the configured server name): a phone on the local network that opened the page
+// by the LAN address keeps using it, since the router may not loop back to the public address.
 func (a *App) joinBaseURL(host string) string {
 	cfg := a.cfg.Get()
-	if a.publicCert() {
-		return "https://" + hostPort(cfg.ServerName, cfg.Ports.HTTPS, 443)
-	}
-	if host == "" {
+	if host == "" || strings.EqualFold(host, cfg.ServerName) {
+		if a.publicCert() {
+			return "https://" + hostPort(cfg.ServerName, cfg.Ports.HTTPS, 443)
+		}
 		host = cfg.ServerName
 	}
 	return "http://" + hostPort(host, a.httpPort(), 80)
-}
-
-// publicCert reports whether the panel serves a Let's Encrypt certificate that phones trust.
-func (a *App) publicCert() bool {
-	m, _ := a.acmeFor()
-	return m != nil
 }
 
 func (a *App) httpPort() int {

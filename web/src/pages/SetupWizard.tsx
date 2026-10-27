@@ -18,8 +18,10 @@ import {
 } from 'lucide-react';
 import { api } from '../api/endpoints';
 import { errorMessage } from '../api/client';
-import type { NetworkMode, PlatformKey, Ports, SetupDefaults, SetupProgress, SetupRequest, StepState } from '../api/types';
+import type { AccessMode, NetworkMode, PlatformKey, Ports, SetupDefaults, SetupProgress, SetupRequest, StepState } from '../api/types';
+import { AccessChoice, DetectIpButton, PortForwarding } from '../components/PublicAccess';
 import { BrandMark, Choice, CheckRow, Disclosure, ErrorState, Field, Loading, Notice } from '../components/ui';
+import { isPublicIp, looksPublicDomain, validEmail } from '../lib/access';
 import { useTheme } from '../lib/theme';
 import { fmtTime } from '../lib/format';
 import { platformOs } from '../lib/tak';
@@ -60,16 +62,6 @@ function randomPassword(len = 10): string {
 
 const IPV4 = /^\d{1,3}(\.\d{1,3}){3}$/;
 
-/** Czy nazwa wygląda na publiczną domenę (dla Let's Encrypt)? */
-function looksPublicDomain(name: string): boolean {
-  const n = name.trim().toLowerCase();
-  if (!n || IPV4.test(n) || n.includes(':')) return false;
-  if (!/^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(n)) return false;
-  const tld = n.split('.').pop() ?? '';
-  if (!/^[a-z]{2,}$/.test(tld)) return false;
-  return !['local', 'lan', 'home', 'internal', 'localdomain', 'arpa', 'test', 'invalid', 'localhost', 'corp'].includes(tld);
-}
-
 function validServerName(name: string): boolean {
   const n = name.trim();
   if (!n || /\s/.test(n)) return false;
@@ -78,7 +70,10 @@ function validServerName(name: string): boolean {
 }
 
 interface FormState {
-  serverName: string;
+  access: AccessMode;
+  serverName: string; // adres w sieci lokalnej
+  domain: string;
+  publicIp: string;
   displayName: string;
   organization: string;
   ports: Ports;
@@ -139,7 +134,10 @@ export default function SetupWizard() {
       const d = await api.setupDefaults();
       setDefaults(d);
       setForm({
+        access: 'local',
         serverName: d.suggestedServerName || d.addresses[0]?.ip || '',
+        domain: '',
+        publicIp: '',
         displayName: 'ChameleonTAK',
         organization: 'ChameleonTAK',
         ports: { ...d.ports },
@@ -153,7 +151,7 @@ export default function SetupWizard() {
         staticIp: d.isPi,
         hotspotSsid: 'ChameleonTAK',
         hotspotPassword: randomPassword(),
-        leEnabled: false,
+        leEnabled: true,
         leEmail: '',
         ssh: true,
       });
@@ -228,14 +226,24 @@ export default function SetupWizard() {
   }
 
   const current = STEPS[step].key;
-  const publicDomain = looksPublicDomain(form.serverName);
+  const internet = form.access !== 'local';
+  // Adres, pod którym telefony łączą się z serwerem (trafia do certyfikatu i konfiguracji).
+  const address = (form.access === 'domain' ? form.domain : form.access === 'ip' ? form.publicIp : form.serverName).trim();
+  const useLe = internet && form.leEnabled;
   const allPorts = PORT_FIELDS.filter((p) => p.key !== 'cotTcp' || form.ports.cotTcpEnabled).map((p) => form.ports[p.key]);
 
   const validate = (key: StepKey): Record<string, string> => {
     const e: Record<string, string> = {};
     if (key === 'server') {
-      if (!form.serverName.trim()) e.serverName = 'Podaj adres serwera.';
-      else if (!validServerName(form.serverName)) e.serverName = 'Użyj adresu IP albo nazwy domenowej (bez spacji i http://).';
+      if (form.access === 'local') {
+        if (!form.serverName.trim()) e.serverName = 'Podaj adres serwera.';
+        else if (!validServerName(form.serverName)) e.serverName = 'Użyj adresu IP albo nazwy domenowej (bez spacji i http://).';
+      } else if (form.access === 'domain') {
+        if (!looksPublicDomain(form.domain)) e.domain = 'Podaj publiczną nazwę domenową, np. tak.twojafirma.pl (bez http://).';
+      } else if (!isPublicIp(form.publicIp)) {
+        e.publicIp = 'Podaj publiczny adres IP routera (nie adres z sieci lokalnej ani 100.64.x.x).';
+      }
+      if (useLe && form.leEmail.trim() && !validEmail(form.leEmail)) e.leEmail = 'Niepoprawny adres e-mail.';
       if (!form.displayName.trim()) e.displayName = 'Podaj nazwę wyświetlaną.';
     }
     if (key === 'ports') {
@@ -261,8 +269,8 @@ export default function SetupWizard() {
         if (form.hotspotPassword.length < 8 || form.hotspotPassword.length > 63)
           e.hotspotPassword = 'Hasło Wi-Fi: od 8 do 63 znaków.';
       }
-      if (publicDomain && form.leEnabled && !/^\S+@\S+\.\S+$/.test(form.leEmail))
-        e.leEmail = 'Podaj adres e-mail (Let’s Encrypt wysyła na niego ostrzeżenia o wygasaniu).';
+      if (internet && defaults.isPi && form.mode === 'hotspot')
+        e.mode = 'Hotspot nie ma internetu. Przy dostępie z internetu wybierz istniejącą sieć albo w kroku „Adres serwera” wybierz sieć lokalną.';
     }
     return e;
   };
@@ -298,14 +306,14 @@ export default function SetupWizard() {
       }
     }
     const req: SetupRequest = {
-      serverName: form.serverName.trim(),
+      serverName: address,
       displayName: form.displayName.trim(),
       organization: form.organization.trim() || form.displayName.trim(),
       ports: form.ports,
       admin: { username: form.adminUser.trim(), password: form.adminPass },
       platforms: form.platforms,
       clientTime: new Date().toISOString(),
-      letsEncrypt: { enabled: publicDomain && form.leEnabled, email: publicDomain && form.leEnabled ? form.leEmail.trim() : '' },
+      letsEncrypt: { enabled: useLe, email: useLe ? form.leEmail.trim() : '' },
       network: {
         mode: defaults.isPi ? form.mode : 'lan',
         staticIp: defaults.isPi && form.mode === 'lan' && form.staticIp,
@@ -364,23 +372,88 @@ export default function SetupWizard() {
         <div className="stack-lg">
           <div className="stack-sm">
             <h2 tabIndex={-1}>Adres serwera</h2>
-            <p className="muted measure">
-              Pod tym adresem telefony będą łączyć się z serwerem, więc musi być osiągalny z ich sieci.
-            </p>
+            <p className="muted measure">Skąd telefony będą łączyć się z serwerem?</p>
           </div>
-          <Field label="Adres (IP albo nazwa domenowa)" htmlFor="s-name" error={err('serverName')}>
-            <input
-              id="s-name"
-              className="input input-code"
-              value={form.serverName}
-              autoCapitalize="none"
-              autoCorrect="off"
-              spellCheck={false}
-              aria-invalid={!!err('serverName')}
-              onChange={(e) => set('serverName', e.target.value)}
-            />
-          </Field>
-          {defaults.addresses.length > 0 && (
+          <AccessChoice value={form.access} onChange={(m) => set('access', m)} />
+          {form.access === 'local' && (
+            <Field label="Adres w sieci lokalnej (IP albo nazwa)" htmlFor="s-name" error={err('serverName')}>
+              <input
+                id="s-name"
+                className="input input-code"
+                value={form.serverName}
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                aria-invalid={!!err('serverName')}
+                onChange={(e) => set('serverName', e.target.value)}
+              />
+            </Field>
+          )}
+          {form.access === 'domain' && (
+            <Field label="Domena" htmlFor="s-domain" error={err('domain')} hint="Bez http:// i bez portu, np. tak.twojafirma.pl.">
+              <input
+                id="s-domain"
+                className="input input-code"
+                value={form.domain}
+                placeholder="tak.twojafirma.pl"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                aria-invalid={!!err('domain')}
+                onChange={(e) => set('domain', e.target.value.trim().toLowerCase())}
+              />
+            </Field>
+          )}
+          {form.access === 'ip' && (
+            <div className="stack-sm">
+              <Field label="Publiczny adres IP routera" htmlFor="s-pubip" error={err('publicIp')}>
+                <input
+                  id="s-pubip"
+                  className="input input-code"
+                  value={form.publicIp}
+                  inputMode="decimal"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  aria-invalid={!!err('publicIp')}
+                  onChange={(e) => set('publicIp', e.target.value.trim())}
+                />
+              </Field>
+              <DetectIpButton
+                detect={api.setupPublicIp}
+                onFound={(r) => {
+                  set('publicIp', r.ip);
+                  if (!r.public) setErrors((e) => ({ ...e, publicIp: `Wykryto ${r.ip} — to nie jest publiczny adres (CGNAT?). Użyj domeny albo poproś dostawcę o publiczne IP.` }));
+                }}
+              />
+            </div>
+          )}
+          {internet && (
+            <>
+              <PortForwarding mode={form.access} ports={form.ports} lanAddress={form.serverName} />
+              <CheckRow
+                checked={form.leEnabled}
+                onChange={(v) => set('leEnabled', v)}
+                label="Certyfikat Let’s Encrypt (zalecane)"
+                hint={`Telefony zaufają serwerowi bez ostrzeżeń, a iTAK i TAKAware zarejestrują się kodem QR prosto z aplikacji.${
+                  form.access === 'ip' ? ' Certyfikat dla adresu IP jest ważny 6 dni i odnawia się sam.' : ''
+                }`}
+              />
+              {form.leEnabled && (
+                <Field label="E-mail dla Let’s Encrypt (opcjonalnie)" htmlFor="s-le" error={err('leEmail')}>
+                  <input
+                    id="s-le"
+                    className="input"
+                    type="email"
+                    autoComplete="email"
+                    value={form.leEmail}
+                    onChange={(e) => set('leEmail', e.target.value)}
+                  />
+                </Field>
+              )}
+            </>
+          )}
+          {form.access === 'local' && defaults.addresses.length > 0 && (
             <div className="stack-sm">
               <span className="small muted">Wykryte adresy tego urządzenia — stuknij, aby wybrać:</span>
               <div className="chips">
@@ -633,30 +706,9 @@ export default function SetupWizard() {
             </>
           )}
 
-          {(publicDomain || defaults.isPi) && <hr style={{ margin: 0 }} />}
+          {err('mode') && <Notice kind="danger">{err('mode')}</Notice>}
 
-          {publicDomain && (
-            <div className="stack-sm">
-              <CheckRow
-                checked={form.leEnabled}
-                onChange={(v) => set('leEnabled', v)}
-                label="Certyfikat Let’s Encrypt dla panelu"
-                hint={`Przeglądarki nie pokażą ostrzeżenia na https://${form.serverName}. Serwer musi być dostępny z internetu na porcie ${form.ports.http}.`}
-              />
-              {form.leEnabled && (
-                <Field label="E-mail do powiadomień" htmlFor="n-le" error={err('leEmail')}>
-                  <input
-                    id="n-le"
-                    className="input"
-                    type="email"
-                    autoComplete="email"
-                    value={form.leEmail}
-                    onChange={(e) => set('leEmail', e.target.value)}
-                  />
-                </Field>
-              )}
-            </div>
-          )}
+          {defaults.isPi && <hr style={{ margin: 0 }} />}
 
           {defaults.isPi && (
             <CheckRow
@@ -684,8 +736,15 @@ export default function SetupWizard() {
           {submitError && <Notice kind="danger">{submitError}</Notice>}
           <div className="summary-list">
             <SummaryRow label="Adres serwera" onEdit={() => goTo(1)}>
-              <span className="code">{form.serverName}</span>
+              <span className="code">{address}</span>
               <span className="faint"> — {form.displayName}</span>
+              {internet && (
+                <>
+                  <br />
+                  {form.access === 'domain' ? 'dostęp z internetu przez domenę' : 'dostęp z internetu przez publiczny adres IP'}
+                  {useLe && `; Let’s Encrypt${form.leEmail.trim() ? ` (${form.leEmail.trim()})` : ''}`}
+                </>
+              )}
             </SummaryRow>
             <SummaryRow label="Porty" onEdit={() => goTo(2)}>
               {[
@@ -707,7 +766,6 @@ export default function SetupWizard() {
                 : form.mode === 'lan'
                   ? `istniejąca sieć${form.staticIp ? ', stały adres IP' : ''}`
                   : `hotspot „${form.hotspotSsid}”, hasło ${form.hotspotPassword}`}
-              {publicDomain && form.leEnabled && `; Let’s Encrypt (${form.leEmail})`}
               {defaults.isPi && form.ssh && '; SSH włączony'}
             </SummaryRow>
           </div>

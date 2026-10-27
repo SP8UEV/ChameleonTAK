@@ -217,10 +217,7 @@ func (a *App) validateSetup(req *SetupRequest) error {
 	if a.helper.Available() && !system.WifiAvailable() && (req.Network.Mode == "hotspot" || req.Network.WifiSSID != "") {
 		return invalid("Ten system nie ma Wi-Fi zarządzanego przez NetworkManager — wybierz sieć LAN bez Wi-Fi.")
 	}
-	if req.LetsEncrypt.Enabled && !IsPublicDomain(req.ServerName) {
-		return invalid("Let's Encrypt wymaga publicznej nazwy domenowej (nie adresu IP).")
-	}
-	return nil
+	return validateLetsEncrypt(req.ServerName, req.LetsEncrypt)
 }
 
 // RunSetup performs the whole first-time configuration. It is used by the web wizard and the CLI.
@@ -373,6 +370,7 @@ func (a *App) RunSetup(req SetupRequest, job *setupJob) error {
 			return "Usługi wystartują przy następnym uruchomieniu.", nil
 		}
 		a.startServices()
+		a.public.wake()
 		var failed []string
 		for _, s := range a.listenerStates() {
 			if s.State == "error" {

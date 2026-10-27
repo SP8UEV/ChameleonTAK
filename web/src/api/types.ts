@@ -50,6 +50,30 @@ export interface LetsEncrypt {
 
 export type NetworkMode = 'lan' | 'hotspot';
 
+/** Jak telefony docierają do serwera: sieć lokalna, własna domena albo publiczny adres IP. */
+export type AccessMode = 'local' | 'domain' | 'ip';
+
+export interface PublicCertStatus {
+  state: 'off' | 'pending' | 'ok' | 'error';
+  host: string;
+  notAfter: string | null;
+  error: string;
+  nextAttempt: string | null;
+}
+
+export interface PublicAccess {
+  mode: AccessMode;
+  host: string;
+  letsEncrypt: boolean;
+  cert: PublicCertStatus;
+  httpPort: number;
+}
+
+export interface PublicIP {
+  ip: string;
+  public: boolean;
+}
+
 export interface SetupRequest {
   serverName: string;
   displayName: string;

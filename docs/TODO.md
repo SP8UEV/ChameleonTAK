@@ -7,7 +7,8 @@ Lista aktualizowana na bieżąco. Zrobione pozycje przenosimy na dół do „Zro
 - [ ] **Paczka ATAK się nie importuje** (zgłoszone na v0.1.1, Raspberry 192.168.1.102, kabel LAN). Serwer i porty
       działają, certyfikat OK — potrzebny log z Raspberry albo komunikat z ATAK.
 - [ ] **QR ma działać bez problemów** na Androidzie i iOS (najwyższy priorytet).
-- [ ] **Tryby sieci w kreatorze:** lokalnie / własny hotspot / **publiczny adres IP** / **własna domena** / **ZeroTier**.
+- [ ] **Tryby sieci w kreatorze:** lokalnie / własny hotspot / publiczny adres IP / własna domena są zrobione;
+      zostaje **ZeroTier**. Publiczne IP i domena czekają na test z prawdziwym przekierowaniem portów.
 - [ ] **Obsługa LoRa** (Meshtastic — sprzęt jeszcze nie wybrany; najpewniej moduł na USB).
 
 ## Do sprawdzenia na prawdziwym sprzęcie

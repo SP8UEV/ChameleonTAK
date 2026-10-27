@@ -2,7 +2,9 @@ import { useRef, useState, type ReactNode } from 'react';
 import { Archive, Download, LoaderCircle, Network, Power, RotateCcw, Save, TriangleAlert, Upload, Wifi } from 'lucide-react';
 import { api } from '../api/endpoints';
 import { errorMessage } from '../api/client';
-import type { NetworkMode, PlatformKey, Ports, Settings } from '../api/types';
+import type { AccessMode, NetworkMode, PlatformKey, Ports, Settings } from '../api/types';
+import { AccessChoice, CertStatusView, DetectIpButton, PortForwarding } from '../components/PublicAccess';
+import { accessModeOf, isPublicIp, looksPublicDomain, validEmail } from '../lib/access';
 import { useSession } from '../app/session';
 import { useConfirm } from '../components/Confirm';
 import { useToast } from '../components/Toast';
@@ -14,7 +16,7 @@ import { useApi } from '../lib/useApi';
 const DEFAULT_TILES = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 
 const SECTIONS = [
-  { id: 'serwer', label: 'Serwer' },
+  { id: 'serwer', label: 'Serwer i dostęp' },
   { id: 'porty', label: 'Porty' },
   { id: 'aplikacje', label: 'Aplikacje' },
   { id: 'profil', label: 'Profil urządzeń' },
@@ -144,16 +146,40 @@ function useSaver(save: SaveFn) {
 
 /* ---------- Serwer ---------- */
 function ServerSection({ s, save }: { s: Settings; save: SaveFn }) {
-  const [serverName, setServerName] = useState(s.serverName);
+  const [access, setAccess] = useState<AccessMode>(() => accessModeOf(s.serverName));
+  // Osobny adres dla każdego trybu, żeby przełączanie trybów nie gubiło wpisanych wartości.
+  const [names, setNames] = useState<Record<AccessMode, string>>(() => ({
+    local: accessModeOf(s.serverName) === 'local' ? s.serverName : '',
+    domain: accessModeOf(s.serverName) === 'domain' ? s.serverName : '',
+    ip: accessModeOf(s.serverName) === 'ip' ? s.serverName : '',
+  }));
+  const [leEnabled, setLeEnabled] = useState(s.letsEncrypt.enabled || accessModeOf(s.serverName) === 'local');
+  const [leEmail, setLeEmail] = useState(s.letsEncrypt.email);
   const [displayName, setDisplayName] = useState(s.displayName);
   const [organization, setOrganization] = useState(s.organization);
+  const [error, setError] = useState<string | null>(null);
+  const status = useApi(api.publicAccess, [s.serverName, s.letsEncrypt.enabled], 15000);
+  const sys = useApi(api.system, []);
   const { saving, run } = useSaver(save);
   const confirm = useConfirm();
-  const nameChanged = serverName.trim() !== s.serverName;
-  const dirty = nameChanged || displayName !== s.displayName || organization !== s.organization;
+  const serverName = names[access].trim();
+  const internet = access !== 'local';
+  const le = { enabled: internet && leEnabled, email: internet && leEnabled ? leEmail.trim() : s.letsEncrypt.email };
+  const nameChanged = serverName !== s.serverName;
+  const dirty =
+    nameChanged ||
+    le.enabled !== s.letsEncrypt.enabled ||
+    le.email !== s.letsEncrypt.email ||
+    displayName !== s.displayName ||
+    organization !== s.organization;
+  const lanAddress = sys.data?.addresses[0]?.ip;
 
   const submit = async () => {
-    if (!serverName.trim() || /\s/.test(serverName.trim())) return;
+    if (access === 'local' && (!serverName || /\s/.test(serverName))) return setError('Podaj adres serwera w sieci lokalnej.');
+    if (access === 'domain' && !looksPublicDomain(serverName)) return setError('Podaj publiczną nazwę domenową, np. tak.twojafirma.pl.');
+    if (access === 'ip' && !isPublicIp(serverName)) return setError('Podaj publiczny adres IP routera (nie adres z sieci lokalnej ani 100.64.x.x).');
+    if (le.enabled && le.email && !validEmail(le.email)) return setError('Niepoprawny adres e-mail dla Let’s Encrypt.');
+    setError(null);
     if (nameChanged) {
       const ok = await confirm({
         title: 'Zmienić adres serwera?',
@@ -167,21 +193,90 @@ function ServerSection({ s, save }: { s: Settings; save: SaveFn }) {
       });
       if (!ok) return;
     }
-    await run({ serverName: serverName.trim(), displayName: displayName.trim(), organization: organization.trim() });
+    if (await run({ serverName, letsEncrypt: le, displayName: displayName.trim(), organization: organization.trim() })) {
+      void status.reload();
+    }
   };
 
+  const setName = (v: string) => setNames({ ...names, [access]: v });
+
   return (
-    <Section id="serwer" title="Serwer" onSave={submit} dirty={dirty} saving={saving}>
-      <Field label="Adres serwera" htmlFor="st-name" hint="IP albo nazwa domenowa, pod którą telefony łączą się z serwerem.">
-        <input
-          id="st-name"
-          className="input input-code"
-          value={serverName}
-          autoCapitalize="none"
-          autoCorrect="off"
-          onChange={(e) => setServerName(e.target.value)}
-        />
-      </Field>
+    <Section
+      id="serwer"
+      title="Serwer i dostęp"
+      description="Skąd telefony łączą się z serwerem. Ten adres trafia do certyfikatu i do konfiguracji urządzeń."
+      onSave={submit}
+      dirty={dirty}
+      saving={saving}
+    >
+      {error && <Notice kind="danger">{error}</Notice>}
+      <AccessChoice value={access} onChange={setAccess} />
+      {access === 'local' && (
+        <Field label="Adres w sieci lokalnej" htmlFor="st-name" hint="IP albo nazwa, pod którą telefony w sieci lokalnej widzą serwer.">
+          <input
+            id="st-name"
+            className="input input-code"
+            value={names.local}
+            autoCapitalize="none"
+            autoCorrect="off"
+            onChange={(e) => setName(e.target.value)}
+          />
+        </Field>
+      )}
+      {access === 'domain' && (
+        <Field label="Domena" htmlFor="st-domain" hint="Bez http:// i bez portu, np. tak.twojafirma.pl.">
+          <input
+            id="st-domain"
+            className="input input-code"
+            value={names.domain}
+            placeholder="tak.twojafirma.pl"
+            autoCapitalize="none"
+            autoCorrect="off"
+            onChange={(e) => setName(e.target.value.trim().toLowerCase())}
+          />
+        </Field>
+      )}
+      {access === 'ip' && (
+        <div className="stack-sm">
+          <Field label="Publiczny adres IP routera" htmlFor="st-pubip">
+            <input
+              id="st-pubip"
+              className="input input-code"
+              value={names.ip}
+              inputMode="decimal"
+              autoCapitalize="none"
+              autoCorrect="off"
+              onChange={(e) => setName(e.target.value.trim())}
+            />
+          </Field>
+          <DetectIpButton
+            detect={api.publicIp}
+            onFound={(r) => {
+              setNames({ ...names, ip: r.ip });
+              setError(r.public ? null : `Wykryto ${r.ip} — to nie jest publiczny adres (CGNAT?). Użyj domeny albo poproś dostawcę o publiczne IP.`);
+            }}
+          />
+        </div>
+      )}
+      {internet && (
+        <>
+          <PortForwarding mode={access} ports={s.ports} lanAddress={lanAddress} />
+          <CheckRow
+            checked={leEnabled}
+            onChange={setLeEnabled}
+            label="Certyfikat Let’s Encrypt (zalecane)"
+            hint={`Telefony zaufają serwerowi bez ostrzeżeń, a iTAK i TAKAware zarejestrują się kodem QR prosto z aplikacji.${
+              access === 'ip' ? ' Certyfikat dla adresu IP jest ważny 6 dni i odnawia się sam.' : ''
+            }`}
+          />
+          {leEnabled && (
+            <Field label="E-mail dla Let’s Encrypt (opcjonalnie)" htmlFor="st-le">
+              <input id="st-le" className="input" type="email" value={leEmail} onChange={(e) => setLeEmail(e.target.value)} />
+            </Field>
+          )}
+          {!nameChanged && status.data && <CertStatusView status={status.data.cert} />}
+        </>
+      )}
       {nameChanged && (
         <Notice kind="warn">
           Zmiana adresu wygeneruje nowy certyfikat serwera. Urządzenia skonfigurowane na stary adres mogą wymagać nowych kodów
@@ -377,29 +472,16 @@ function CertsSection({ s, save }: { s: Settings; save: SaveFn }) {
   const [certDays, setCertDays] = useState(s.certValidityDays);
   const [tokenHours, setTokenHours] = useState(s.tokenValidityHours);
   const [certPassword, setCertPassword] = useState(s.certPassword);
-  const [leEnabled, setLeEnabled] = useState(s.letsEncrypt.enabled);
-  const [leEmail, setLeEmail] = useState(s.letsEncrypt.email);
   const [error, setError] = useState<string | null>(null);
   const { saving, run } = useSaver(save);
-  const dirty =
-    certDays !== s.certValidityDays ||
-    tokenHours !== s.tokenValidityHours ||
-    certPassword !== s.certPassword ||
-    leEnabled !== s.letsEncrypt.enabled ||
-    leEmail !== s.letsEncrypt.email;
+  const dirty = certDays !== s.certValidityDays || tokenHours !== s.tokenValidityHours || certPassword !== s.certPassword;
 
   const submit = () => {
     if (!Number.isInteger(certDays) || certDays < 1 || certDays > 3650) return setError('Ważność certyfikatu: od 1 do 3650 dni.');
     if (!Number.isInteger(tokenHours) || tokenHours < 1 || tokenHours > 8760) return setError('Ważność kodu: od 1 do 8760 godzin.');
     if (certPassword.length < 4) return setError('Hasło paczek certyfikatów musi mieć co najmniej 4 znaki.');
-    if (leEnabled && !/^\S+@\S+\.\S+$/.test(leEmail)) return setError('Podaj adres e-mail dla Let’s Encrypt.');
     setError(null);
-    void run({
-      certValidityDays: certDays,
-      tokenValidityHours: tokenHours,
-      certPassword,
-      letsEncrypt: { enabled: leEnabled, email: leEmail.trim() },
-    });
+    void run({ certValidityDays: certDays, tokenValidityHours: tokenHours, certPassword });
   };
 
   const tokenDays = Number.isFinite(tokenHours) && tokenHours >= 24 ? ` (${Math.round((tokenHours / 24) * 10) / 10} dni)` : '';
@@ -431,17 +513,6 @@ function CertsSection({ s, save }: { s: Settings; save: SaveFn }) {
           />
         </Field>
       </div>
-      <CheckRow
-        checked={leEnabled}
-        onChange={setLeEnabled}
-        label="Certyfikat Let’s Encrypt dla panelu"
-        hint="Tylko gdy adres serwera to publiczna domena dostępna z internetu."
-      />
-      {leEnabled && (
-        <Field label="E-mail do powiadomień Let’s Encrypt" htmlFor="c-le">
-          <input id="c-le" className="input" type="email" value={leEmail} onChange={(e) => setLeEmail(e.target.value)} />
-        </Field>
-      )}
       <Disclosure title="Zaawansowane">
         <Field
           label="Hasło paczek certyfikatów (.p12)"
