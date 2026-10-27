@@ -11,7 +11,17 @@ import (
 	"chameleontak/internal/cot"
 )
 
-const idleTimeout = 5 * time.Minute
+const (
+	idleTimeout = 5 * time.Minute
+	firstLogged = 5 // events logged at the start of each connection
+)
+
+func head(b []byte, n int) string {
+	if len(b) > n {
+		b = b[:n]
+	}
+	return string(b)
+}
 
 // Authenticator maps a verified TLS client certificate to an identity.
 type Authenticator func(state tls.ConnectionState) (Identity, error)
@@ -103,10 +113,20 @@ func (l *Listener) handle(conn net.Conn) {
 			}
 			return
 		}
+		// The first few events of a connection go to the log, so a client that never shows up on
+		// the map can be diagnosed.
+		first := c.received.Add(1) <= firstLogged
 		ev, err := cot.Parse(raw)
 		if err != nil {
 			// Non-event top-level elements (e.g. <auth>) are ignored.
+			if first {
+				l.r.log.Info("nieczytelny element CoT", "id", c.ID, "err", err, "head", head(raw, 120))
+			}
 			continue
+		}
+		if first {
+			l.r.log.Info("zdarzenie CoT", "id", c.ID, "type", ev.Type, "uid", ev.UID, "callsign", ev.Callsign,
+				"app", ev.TakvPlatform, "team", ev.GroupName, "sa", ev.IsSA(), "pos", ev.Lat != 0 || ev.Lon != 0)
 		}
 		l.r.Handle(c, ev)
 	}

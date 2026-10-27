@@ -180,8 +180,10 @@ func Parse(raw []byte) (*Event, error) {
 }
 
 // IsSA reports whether the event is a client's own situational-awareness (position) report.
+// Markers carry a contact too, but never the sender's app (takv) or team (__group). The contact
+// endpoint is not required: not every client sends it.
 func (e *Event) IsSA() bool {
-	return strings.HasPrefix(e.Type, "a-") && e.HasContact && e.Endpoint != "" && (e.TakvPlatform != "" || e.GroupName != "")
+	return strings.HasPrefix(e.Type, "a-") && e.HasContact && (e.TakvPlatform != "" || e.GroupName != "")
 }
 
 func (e *Event) IsPing() bool { return e.Type == "t-x-c-t" }

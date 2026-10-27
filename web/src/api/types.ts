@@ -378,7 +378,7 @@ export interface Cert {
 export type WsMessage =
   | { type: 'position'; data: Position }
   | { type: 'remove'; data: { uid: string } }
-  | { type: 'client'; data: { event: 'connect' | 'disconnect'; client: Client } }
+  | { type: 'client'; data: { event: 'connect' | 'update' | 'disconnect'; client: Client } }
   | { type: 'chat'; data: ChatMessage };
 
 /** Zdarzenie z dziennika serwera (GET /api/logs, najnowsze pierwsze). */

@@ -35,6 +35,8 @@ type Client struct {
 	done      chan struct{}
 	closeOnce sync.Once
 	drops     atomic.Int64
+	received  atomic.Int64 // events read from the client, for diagnostics
+	announced atomic.Bool
 
 	mu       sync.RWMutex
 	uid      string
@@ -88,6 +90,10 @@ func (c *Client) Groups() []string {
 	defer c.mu.RUnlock()
 	return c.groups
 }
+
+// Announce reports true once per connection, when its first own SA has been recorded (the panel
+// then learns the callsign and the app).
+func (c *Client) Announce() bool { return !c.announced.Swap(true) }
 
 // Send queues raw bytes for the client without blocking the router.
 func (c *Client) Send(raw []byte) {

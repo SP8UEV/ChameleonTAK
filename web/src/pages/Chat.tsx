@@ -38,7 +38,7 @@ export default function Chat() {
       clients.setData((list) => {
         if (!list) return list;
         const rest = list.filter((c) => c.id !== client.id);
-        return event === 'connect' ? [...rest, client] : rest;
+        return event === 'disconnect' ? rest : [...rest, client];
       });
     }
   });

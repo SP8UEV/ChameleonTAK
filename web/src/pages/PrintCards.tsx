@@ -99,7 +99,7 @@ function CardsSheet({ users }: { users: User[] }) {
                   </div>
                 )}
                 <div className="print-creds">
-                  <div className="print-step">Zeskanuj kod aparatem telefonu i stuknij „Pobierz konfigurację”.</div>
+                  <div className="print-step">Zeskanuj kod aparatem telefonu (nie w aplikacji TAK) i postępuj według strony, która się otworzy.</div>
                   <div className="print-kv">
                     <div className="print-kv-wide">
                       <span>Serwer</span>
