@@ -90,12 +90,13 @@ func (a *App) deviceView(u *store.User, d *store.Device, online map[int64]bool) 
 		dj.CertSerial, dj.CertExpires = c.Serial, timePtr(c.NotAfter)
 	}
 	if t, err := a.store.LatestToken(d.ID); err == nil {
-		join := a.panelBaseURL() + "/join/" + t.Token
+		base := a.joinBaseURL("")
+		join := base + "/join/" + t.Token
 		dj.Enrollment = &enrollmentJSON{
 			Token: t.Token, ExpiresAt: t.ExpiresAt, Used: !t.UsedAt.IsZero(), Valid: tokenUsable(t), JoinURL: join,
 			QR: map[string]string{
 				"join":   join,
-				"native": datapkg.NativeQR(d.Platform, cfg, u.Username, t.Token, a.joinPackageURL(t.Token, d.Platform)),
+				"native": datapkg.NativeQR(d.Platform, cfg, u.Username, t.Token, joinPackageURL(base, t.Token, d.Platform), a.publicCert()),
 			},
 		}
 	}
@@ -643,13 +644,16 @@ func (a *App) hJoin(w http.ResponseWriter, r *http.Request) {
 			platforms = append(platforms, p)
 		}
 	}
+	// The phone loaded this page, so the address it used works for the package download too, even
+	// when the configured server name does not resolve on the phone.
+	base := a.joinBaseURL(requestHost(r))
 	var options []map[string]any
 	for _, p := range platforms {
 		options = append(options, map[string]any{
 			"platform":   p,
 			"label":      config.PlatformLabel(p),
 			"packageUrl": "/api/join/" + t.Token + "/package/" + p,
-			"nativeQr":   datapkg.NativeQR(p, cfg, u.Username, t.Token, a.joinPackageURL(t.Token, p)),
+			"nativeQr":   datapkg.NativeQR(p, cfg, u.Username, t.Token, joinPackageURL(base, t.Token, p), a.publicCert()),
 			"manual": map[string]any{
 				"host": cfg.ServerName, "port": cfg.Ports.CoTTLS, "enrollPort": cfg.Ports.Enroll,
 				"username": u.Username, "password": t.Token,
@@ -684,6 +688,12 @@ func (a *App) hJoinPackage(w http.ResponseWriter, r *http.Request) {
 		httpError(w, 400, "Nieznana platforma.")
 		return
 	}
+	// Downloaders may probe the URL first; that must not issue a certificate or use up the token.
+	if r.Method == http.MethodHead {
+		w.Header().Set("Content-Type", "application/zip")
+		w.Header().Set("Cache-Control", "no-store")
+		return
+	}
 	data, name, err := a.buildPackage(u, d, platform)
 	if err != nil {
 		fail(w, err)
@@ -695,7 +705,7 @@ func (a *App) hJoinPackage(w http.ResponseWriter, r *http.Request) {
 }
 
 // joinPackageURL is the address the TAK app downloads its package from (ATAK's import link
-// needs a URL ending in .zip). It uses the panel's own HTTP(S) address.
-func (a *App) joinPackageURL(token, platform string) string {
-	return a.panelBaseURL() + "/api/join/" + token + "/" + platform + ".zip"
+// needs a URL ending in .zip); base comes from joinBaseURL.
+func joinPackageURL(base, token, platform string) string {
+	return base + "/api/join/" + token + "/" + platform + ".zip"
 }

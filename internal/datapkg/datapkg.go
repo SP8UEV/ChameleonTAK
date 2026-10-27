@@ -39,8 +39,9 @@ type Params struct {
 //     package itself (truststore, client certificate, preferences). It works with our private CA
 //     and over plain HTTP, so it is used in every network mode.
 //   - iTAK / TAKAware: their in-app enrollment only trusts a publicly trusted certificate on the
-//     enrollment port, so the registration QR is offered only with Let's Encrypt.
-func NativeQR(platform string, cfg config.Config, username, token, packageURL string) string {
+//     enrollment port, so the registration QR is offered only when publicCert (Let's Encrypt is
+//     actually serving the server name).
+func NativeQR(platform string, cfg config.Config, username, token, packageURL string, publicCert bool) string {
 	switch platform {
 	case "atak", "wintak":
 		if platform == "wintak" || packageURL == "" {
@@ -48,7 +49,7 @@ func NativeQR(platform string, cfg config.Config, username, token, packageURL st
 		}
 		return "tak://com.atakmap.app/import?url=" + url.QueryEscape(packageURL)
 	case "itak", "takaware":
-		if !cfg.LetsEncrypt.Enabled {
+		if !publicCert {
 			return ""
 		}
 		reg := map[string]any{

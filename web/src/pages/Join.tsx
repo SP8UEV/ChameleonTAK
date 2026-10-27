@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
-import { CircleCheck, Clock, Download, ExternalLink, FolderOpen, KeyRound, LinkIcon, QrCode as QrIcon, Share, ShieldAlert, type LucideIcon } from 'lucide-react';
+import { CircleCheck, Clock, Download, ExternalLink, FolderOpen, KeyRound, LinkIcon, QrCode as QrIcon, Settings, ShieldAlert, type LucideIcon } from 'lucide-react';
 import { api } from '../api/endpoints';
 import { errorMessage } from '../api/client';
 import type { JoinInfo, JoinOption, JoinValid, PlatformKey } from '../api/types';
@@ -35,8 +35,24 @@ function stepsFor(p: PlatformKey): { steps: Step[]; install: string } {
     case 'itak':
       return {
         steps: [
-          { icon: Download, text: <>Stuknij <strong>Pobierz konfigurację</strong>. Plik trafi do aplikacji Pliki.</> },
-          { icon: Share, text: <>Otwórz plik, stuknij <strong>Udostępnij</strong> i wybierz <strong>iTAK</strong>.</> },
+          {
+            icon: Download,
+            text: (
+              <>
+                Stuknij <strong>Pobierz konfigurację</strong> i potwierdź <strong>Pobierz</strong>. Plik trafi do aplikacji Pliki, do
+                folderu <strong>Pobrane</strong>.
+              </>
+            ),
+          },
+          {
+            icon: Settings,
+            text: (
+              <>
+                W iTAK stuknij <strong>Settings</strong> (koło zębate) → <strong>Network</strong> → <strong>Servers</strong> →{' '}
+                <strong>+</strong> → <strong>Upload Server Package</strong> i wskaż pobrany plik.
+              </>
+            ),
+          },
           { icon: CircleCheck, text: <>iTAK zaimportuje ustawienia, a serwer pojawi się na liście na zielono.</> },
         ],
         install: 'Nie masz iTAK? Zainstaluj go z App Store.',
@@ -44,8 +60,23 @@ function stepsFor(p: PlatformKey): { steps: Step[]; install: string } {
     case 'takaware':
       return {
         steps: [
-          { icon: Download, text: <>Stuknij <strong>Pobierz konfigurację</strong>. Plik trafi do aplikacji Pliki.</> },
-          { icon: Share, text: <>Otwórz plik, stuknij <strong>Udostępnij</strong> i wybierz <strong>TAKAware</strong>.</> },
+          {
+            icon: Download,
+            text: (
+              <>
+                Stuknij <strong>Pobierz konfigurację</strong> i potwierdź <strong>Pobierz</strong>. Plik trafi do aplikacji Pliki, do
+                folderu <strong>Pobrane</strong>.
+              </>
+            ),
+          },
+          {
+            icon: Settings,
+            text: (
+              <>
+                W TAKAware otwórz ustawienia, wybierz import paczki danych (<strong>Data Package</strong>) i wskaż pobrany plik.
+              </>
+            ),
+          },
           { icon: CircleCheck, text: <>TAKAware połączy się z serwerem. Gotowe.</> },
         ],
         install: 'Nie masz TAKAware? Zainstaluj go z App Store.',

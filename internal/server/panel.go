@@ -35,7 +35,7 @@ func (a *App) panelHandler(isTLS bool) http.Handler {
 		if !cfg.SetupDone && a.captiveRedirect(w, r) {
 			return
 		}
-		if !isTLS && cfg.SetupDone && cfg.ForceHTTPS && !strings.HasPrefix(r.URL.Path, "/api/join/") {
+		if !isTLS && cfg.SetupDone && cfg.ForceHTTPS && !phonePath(r.URL.Path) {
 			host := r.Host
 			if h, _, err := net.SplitHostPort(host); err == nil {
 				host = h
@@ -289,29 +289,85 @@ func (a *App) hTrustStore(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(p12)
 }
 
-// panelBaseURL is the address end users open (join links, QR codes).
+// panelBaseURL is the address the administrator opens the panel at.
 func (a *App) panelBaseURL() string {
 	cfg := a.cfg.Get()
-	host := cfg.ServerName
+	if cfg.ForceHTTPS {
+		return "https://" + hostPort(cfg.ServerName, cfg.Ports.HTTPS, 443)
+	}
+	return "http://" + hostPort(cfg.ServerName, a.httpPort(), 80)
+}
+
+// joinBaseURL is the address phones use for the join page and the package download (join QR
+// codes, ATAK's import link). Phones trust only public CAs, and ATAK's downloader rejects our own
+// CA, so HTTPS is used only with a Let's Encrypt certificate and plain HTTP otherwise; the
+// package sits behind a single-use token. host is the name the phone already reached the server
+// by ("" means the configured server name); with Let's Encrypt it must be the server name.
+func (a *App) joinBaseURL(host string) string {
+	cfg := a.cfg.Get()
+	if a.publicCert() {
+		return "https://" + hostPort(cfg.ServerName, cfg.Ports.HTTPS, 443)
+	}
+	if host == "" {
+		host = cfg.ServerName
+	}
+	return "http://" + hostPort(host, a.httpPort(), 80)
+}
+
+// publicCert reports whether the panel serves a Let's Encrypt certificate that phones trust.
+func (a *App) publicCert() bool {
+	m, _ := a.acmeFor()
+	return m != nil
+}
+
+func (a *App) httpPort() int {
+	port := a.cfg.Get().Ports.HTTP
+	if _, p, err := net.SplitHostPort(a.opts.HTTPAddr); err == nil {
+		if n, err := strconv.Atoi(p); err == nil {
+			port = n
+		}
+	}
+	return port
+}
+
+// hostPort joins a host and a port for a URL, leaving out the scheme's default port.
+func hostPort(host string, port, defaultPort int) string {
 	if strings.Contains(host, ":") && net.ParseIP(host) != nil {
 		host = "[" + host + "]"
 	}
-	if cfg.ForceHTTPS {
-		if cfg.Ports.HTTPS != 443 {
-			host += ":" + strconv.Itoa(cfg.Ports.HTTPS)
+	if port != defaultPort {
+		host += ":" + strconv.Itoa(port)
+	}
+	return host
+}
+
+// requestHost is the host the client addressed (without the port), or "" when it is not a plain
+// IP address or DNS name.
+func requestHost(r *http.Request) string {
+	host := r.Host
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	host = strings.TrimSuffix(strings.TrimPrefix(host, "["), "]")
+	if validateServerName(host) != nil {
+		return ""
+	}
+	return host
+}
+
+// phonePath reports the paths a phone opens from a join QR code. They stay reachable over plain
+// HTTP even with "force HTTPS", because phones do not trust the server's own CA.
+func phonePath(p string) bool {
+	for _, prefix := range []string{"/join/", "/api/join/", "/assets/"} {
+		if strings.HasPrefix(p, prefix) {
+			return true
 		}
-		return "https://" + host
 	}
-	port := strconv.Itoa(cfg.Ports.HTTP)
-	if a.opts.HTTPAddr != "" {
-		if _, p, err := net.SplitHostPort(a.opts.HTTPAddr); err == nil {
-			port = p
-		}
+	switch p {
+	case "/api/status", "/favicon-64.png", "/apple-touch-icon.png":
+		return true
 	}
-	if port != "80" {
-		host += ":" + port
-	}
-	return "http://" + host
+	return false
 }
 
 // sameOriginWrite blocks cross-site state changes (CSRF): browsers label the request with

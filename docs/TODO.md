@@ -30,6 +30,10 @@ Lista aktualizowana na bieżąco. Zrobione pozycje przenosimy na dół do „Zro
 
 ## Zrobione
 
+- [x] QR: strona dołączania i paczka zawsze po HTTP, gdy nie ma Let's Encrypt (także przy „wymuś HTTPS”);
+      link `tak://…/import` używa adresu, pod którym telefon otworzył stronę; zapytanie HEAD nie zużywa kodu;
+      QR iTAK/TAKAware tylko przy faktycznym certyfikacie LE; poprawione instrukcje dla iOS (Upload Server Package).
+
 - [x] SSH włączone automatycznie w obrazie (konto `tak`); kreator zmienia hasło na hasło administratora.
 - [x] Zapora otwiera port 22, gdy SSH działa (niezależnie od tego, jak je włączono); zapora stosowana przy każdym starcie.
 - [x] Dziennik zdarzeń w panelu (Więcej → Dziennik): nieudane połączenia TLS, odmowy logowania, enrollment, pobrane paczki.
