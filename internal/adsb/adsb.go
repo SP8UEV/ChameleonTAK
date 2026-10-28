@@ -100,7 +100,7 @@ func Detect(ctx context.Context) (string, error) {
 type Filter struct {
 	Lat, Lon   float64 // receiver position; 0,0 = unknown (no range limit)
 	MaxRangeKm float64 // 0 = no limit
-	MaxAltFt   float64 // 0 = no limit
+	MaxAltM    float64 // 0 = no limit
 	MaxAge     time.Duration
 }
 
@@ -112,9 +112,9 @@ type Plane struct {
 	Type     string    `json:"type"`
 	Lat      float64   `json:"lat"`
 	Lon      float64   `json:"lon"`
-	AltFt    float64   `json:"altFt"`
+	AltM     float64   `json:"altM"` // barometric altitude in metres
 	Ground   bool      `json:"ground"`
-	SpeedKt  float64   `json:"speedKt"`
+	SpeedKmh float64   `json:"speedKmh"`
 	Track    float64   `json:"track"`
 	Category string    `json:"category"`
 	Squawk   string    `json:"squawk"`
@@ -150,20 +150,21 @@ func (s *Snapshot) Planes(f Filter) []Plane {
 			Lat: *a.Lat, Lon: *a.Lon, Category: a.Category, Squawk: a.Squawk, Military: a.DBFlags&1 != 0,
 			Seen: now.Add(-time.Duration(seen * float64(time.Second))),
 		}
+		// Decoders report feet and knots, as aviation does; the panel and TAK get metric units.
 		var alt any
 		if len(a.AltBaro) > 0 && json.Unmarshal(a.AltBaro, &alt) == nil {
 			switch v := alt.(type) {
 			case float64:
-				p.AltFt = v
+				p.AltM = v * ftToM
 			case string:
 				p.Ground = v == "ground"
 			}
 		}
-		if p.AltFt == 0 && !p.Ground && a.AltGeom != nil {
-			p.AltFt = *a.AltGeom
+		if p.AltM == 0 && !p.Ground && a.AltGeom != nil {
+			p.AltM = *a.AltGeom * ftToM
 		}
 		if a.GS != nil {
-			p.SpeedKt = *a.GS
+			p.SpeedKmh = *a.GS * ktToKmh
 		}
 		if a.Track != nil {
 			p.Track = *a.Track
@@ -174,13 +175,18 @@ func (s *Snapshot) Planes(f Filter) []Plane {
 				continue
 			}
 		}
-		if f.MaxAltFt > 0 && p.AltFt > f.MaxAltFt {
+		if f.MaxAltM > 0 && p.AltM > f.MaxAltM {
 			continue
 		}
 		out = append(out, p)
 	}
 	return out
 }
+
+const (
+	ftToM   = 0.3048
+	ktToKmh = 1.852
+)
 
 func distanceKm(lat1, lon1, lat2, lon2 float64) float64 {
 	const r = 6371.0
@@ -224,7 +230,6 @@ func (p Plane) Label() string {
 // CoT renders the aircraft as a CoT event that goes stale after stale.
 func (p Plane) CoT(stale time.Duration) []byte {
 	now := time.Now()
-	const ftToM, ktToMs = 0.3048, 0.514444
 	var remarks []string
 	if p.Callsign != "" && p.Reg != "" {
 		remarks = append(remarks, p.Reg)
@@ -235,9 +240,9 @@ func (p Plane) CoT(stale time.Duration) []byte {
 	if p.Ground {
 		remarks = append(remarks, "na ziemi")
 	} else {
-		remarks = append(remarks, fmt.Sprintf("FL%03.0f (%.0f ft)", p.AltFt/100, p.AltFt))
+		remarks = append(remarks, fmt.Sprintf("%.0f m", math.Round(p.AltM/10)*10))
 	}
-	remarks = append(remarks, fmt.Sprintf("%.0f kt", p.SpeedKt))
+	remarks = append(remarks, fmt.Sprintf("%.0f km/h", p.SpeedKmh))
 	if p.Squawk != "" {
 		remarks = append(remarks, "squawk "+p.Squawk)
 	}
@@ -247,6 +252,6 @@ func (p Plane) CoT(stale time.Duration) []byte {
 		`<detail><contact callsign="%[8]s"/><track course="%.1[9]f" speed="%.2[10]f"/>`+
 		`<remarks>%[11]s</remarks><_flow-tags_ chameleontak-adsb="%[3]s"/></detail></event>`,
 		cot.Escape(p.Hex), p.CoTType(), cot.FormatTime(now), cot.FormatTime(now.Add(stale)),
-		p.Lat, p.Lon, p.AltFt*ftToM, cot.Escape(p.Label()), p.Track, p.SpeedKt*ktToMs,
+		p.Lat, p.Lon, p.AltM, cot.Escape(p.Label()), p.Track, p.SpeedKmh/3.6,
 		cot.Escape(strings.Join(remarks, " · "))))
 }

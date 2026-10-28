@@ -1451,3 +1451,23 @@
 .server-port-grid {
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
 }
+
+.adsb-pick-map {
+  isolation: isolate;
+  z-index: 0;
+  height: min(60vh, 460px);
+  min-height: 280px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--line);
+}
+.adsb-pick-info {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px var(--sp-4);
+}
+.adsb-mast {
+  width: 64px;
+  padding-top: 4px;
+  padding-bottom: 4px;
+}

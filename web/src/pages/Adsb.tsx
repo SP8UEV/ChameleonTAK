@@ -2,11 +2,12 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import L from 'leaflet';
 import { Circle, MapContainer, Marker, Popup, TileLayer, useMap, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
-import { Antenna, Cpu, Download, ExternalLink, Globe, LoaderCircle, Plane, Radio, Save, Send } from 'lucide-react';
+import { Antenna, Cpu, Download, ExternalLink, Globe, LoaderCircle, LocateFixed, MapPin, Mountain, Plane, Radio, Save, Send } from 'lucide-react';
 import { api } from '../api/endpoints';
 import { errorMessage } from '../api/client';
 import type { AdsbConfig, AdsbInfo, AdsbPlane, AdsbStatus } from '../api/types';
 import { useSession } from '../app/session';
+import { Modal } from '../components/Modal';
 import { useToast } from '../components/Toast';
 import { AsyncView, CheckRow, Disclosure, Field, GroupPicker, Led, Notice, PageHeader } from '../components/ui';
 import { fmtRelative } from '../lib/format';
@@ -211,9 +212,190 @@ function planeIcon(p: AdsbPlane): L.DivIcon {
   return icon;
 }
 
+const round5 = (v: number) => Number(v.toFixed(5));
+
 function ClickToPick({ onPick }: { onPick: (lat: number, lon: number) => void }) {
-  useMapEvents({ click: (e) => onPick(Number(e.latlng.lat.toFixed(5)), Number(e.latlng.lng.toFixed(5))) });
+  useMapEvents({ click: (e) => onPick(round5(e.latlng.lat), round5(e.latlng.lng)) });
   return null;
+}
+
+/** Leaflet liczy rozmiar mapy przy starcie; w oknie dialogowym trzeba go przeliczyć po otwarciu. */
+function FixSize() {
+  const map = useMap();
+  useEffect(() => {
+    const t = window.setTimeout(() => map.invalidateSize(), 250);
+    return () => window.clearTimeout(t);
+  }, [map]);
+  return null;
+}
+
+/** Wysokość terenu (m n.p.m.) z open-meteo.com; null, gdy niedostępna. */
+async function terrainElevation(lat: number, lon: number): Promise<number | null> {
+  try {
+    const res = await fetch(`https://api.open-meteo.com/v1/elevation?latitude=${lat}&longitude=${lon}`);
+    if (!res.ok) return null;
+    const body = (await res.json()) as { elevation?: number[] };
+    const v = body.elevation?.[0];
+    return typeof v === 'number' && Number.isFinite(v) ? Math.round(v) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Okno „Wskaż na mapie”: kliknięcie albo przeciągnięcie znacznika ustawia antenę. */
+function PickOnMapDialog({
+  initial,
+  mast,
+  onClose,
+  onPick,
+}: {
+  initial: { lat: number; lon: number };
+  mast: number;
+  onClose: () => void;
+  onPick: (lat: number, lon: number, altM: number | null) => void;
+}) {
+  const { settings } = useSession();
+  const tileUrl = settings?.mapTileUrl?.trim() || DEFAULT_TILES;
+  const has = initial.lat !== 0 || initial.lon !== 0;
+  const [pos, setPos] = useState<{ lat: number; lon: number } | null>(has ? initial : null);
+  const [ground, setGround] = useState<number | null>(null);
+  const [mastM, setMastM] = useState(mast);
+  const [locating, setLocating] = useState(false);
+  const [geoError, setGeoError] = useState<string | null>(null);
+  const canLocate = typeof navigator !== 'undefined' && !!navigator.geolocation && window.isSecureContext;
+
+  useEffect(() => {
+    if (!pos) return;
+    let alive = true;
+    setGround(null);
+    void terrainElevation(pos.lat, pos.lon).then((v) => {
+      if (alive) setGround(v);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [pos]);
+
+  const locate = () => {
+    setLocating(true);
+    setGeoError(null);
+    navigator.geolocation.getCurrentPosition(
+      (p) => {
+        setPos({ lat: round5(p.coords.latitude), lon: round5(p.coords.longitude) });
+        setLocating(false);
+      },
+      () => {
+        setGeoError('Przeglądarka nie podała położenia.');
+        setLocating(false);
+      },
+      { enableHighAccuracy: true, timeout: 15000 },
+    );
+  };
+
+  return (
+    <Modal
+      title="Położenie anteny"
+      onClose={onClose}
+      wide
+      footer={
+        <>
+          <button type="button" className="btn" onClick={onClose}>
+            Anuluj
+          </button>
+          <button
+            type="button"
+            className="btn btn-primary"
+            disabled={!pos}
+            onClick={() => pos && onPick(pos.lat, pos.lon, ground != null ? ground + mastM : null)}
+          >
+            <MapPin size={18} /> Ustaw tutaj
+          </button>
+        </>
+      }
+    >
+      <div className="stack-sm">
+        <p className="small muted">Kliknij miejsce anteny albo przeciągnij znacznik. Przybliż mapę, żeby trafić w dach.</p>
+        <MapContainer center={pos ? [pos.lat, pos.lon] : POLAND} zoom={pos ? 16 : 6} className="adsb-pick-map" scrollWheelZoom>
+          <TileLayer url={tileUrl} attribution="&copy; OpenStreetMap" />
+          <FixSize />
+          <ClickToPick onPick={(lat, lon) => setPos({ lat, lon })} />
+          {pos && <FlyTo lat={pos.lat} lon={pos.lon} />}
+          {pos && (
+            <Marker
+              position={[pos.lat, pos.lon]}
+              icon={antennaIcon}
+              draggable
+              eventHandlers={{
+                dragend: (e) => {
+                  const ll = (e.target as L.Marker).getLatLng();
+                  setPos({ lat: round5(ll.lat), lon: round5(ll.lng) });
+                },
+              }}
+            />
+          )}
+        </MapContainer>
+        <div className="adsb-pick-info small">
+          <span className="code">{pos ? `${pos.lat.toFixed(5)}, ${pos.lon.toFixed(5)}` : 'nie wybrano'}</span>
+          {pos && (
+            <span className="row" style={{ gap: 4 }}>
+              <Mountain size={14} /> teren: {ground != null ? `${ground} m n.p.m.` : '…'}
+            </span>
+          )}
+          <label className="row" style={{ gap: 6 }}>
+            maszt / wysokość nad terenem
+            <input
+              className="input input-code adsb-mast"
+              inputMode="numeric"
+              value={mastM}
+              onChange={(e) => setMastM(Number(e.target.value.replace(/\D/g, '')) || 0)}
+              aria-label="Wysokość anteny nad terenem w metrach"
+            />
+            m
+          </label>
+          {canLocate && (
+            <button type="button" className="btn btn-sm" onClick={locate} disabled={locating}>
+              {locating ? <LoaderCircle size={16} className="spinner" /> : <LocateFixed size={16} />} Moja lokalizacja
+            </button>
+          )}
+        </div>
+        {geoError && <span className="small text-danger">{geoError}</span>}
+        <span className="xsmall faint">Wysokość terenu podaje open-meteo.com; wysokość anteny = teren + maszt.</span>
+      </div>
+    </Modal>
+  );
+}
+
+/** Przesuwa mapę do punktu, gdy zmieni się z zewnątrz (np. „Moja lokalizacja”), bez zmiany przybliżenia. */
+function FlyTo({ lat, lon }: { lat: number; lon: number }) {
+  const map = useMap();
+  useEffect(() => {
+    if (!map.getBounds().contains([lat, lon])) map.setView([lat, lon], Math.max(map.getZoom(), 15));
+  }, [lat, lon, map]);
+  return null;
+}
+
+/** Pole liczbowe, które pozwala wpisać przecinek i część dziesiętną (np. „52,1”). */
+function NumberInput({ id, value, onChange, decimals = true }: { id: string; value: number; onChange: (v: number) => void; decimals?: boolean }) {
+  const [text, setText] = useState(value ? String(value) : '');
+  useEffect(() => {
+    const parsed = Number(text.replace(',', '.'));
+    if (value !== (Number.isFinite(parsed) ? parsed : 0)) setText(value ? String(value) : '');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
+  return (
+    <input
+      id={id}
+      className="input input-code"
+      inputMode={decimals ? 'decimal' : 'numeric'}
+      value={text}
+      onChange={(e) => {
+        const t = decimals ? e.target.value.replace(/[^\d.,-]/g, '') : e.target.value.replace(/\D/g, '');
+        setText(t);
+        const v = Number(t.replace(',', '.'));
+        onChange(t.trim() === '' || !Number.isFinite(v) ? 0 : v);
+      }}
+    />
+  );
 }
 
 function Recenter({ lat, lon, has }: { lat: number; lon: number; has: boolean }) {
@@ -240,7 +422,17 @@ function AdsbMap({ cfg, planes, onPick }: { cfg: AdsbConfig; planes: AdsbPlane[]
       <Recenter lat={cfg.lat} lon={cfg.lon} has={has} />
       {has && (
         <>
-          <Marker position={[cfg.lat, cfg.lon]} icon={antennaIcon} />
+          <Marker
+            position={[cfg.lat, cfg.lon]}
+            icon={antennaIcon}
+            draggable
+            eventHandlers={{
+              dragend: (e) => {
+                const ll = (e.target as L.Marker).getLatLng();
+                onPick(round5(ll.lat), round5(ll.lng));
+              },
+            }}
+          />
           {cfg.maxRangeKm > 0 && (
             <Circle center={[cfg.lat, cfg.lon]} radius={cfg.maxRangeKm * 1000} pathOptions={{ color: '#3fb6a8', weight: 1, fillOpacity: 0.04, dashArray: '6 6' }} />
           )}
@@ -256,7 +448,7 @@ function AdsbMap({ cfg, planes, onPick }: { cfg: AdsbConfig; planes: AdsbPlane[]
                 {p.military ? ' · wojskowy' : ''}
               </span>
               <span>
-                {p.ground ? 'na ziemi' : `${Math.round(p.altFt).toLocaleString('pl-PL')} ft`} · {Math.round(p.speedKt)} kt · kurs{' '}
+                {p.ground ? 'na ziemi' : `${(Math.round(p.altM / 10) * 10).toLocaleString('pl-PL')} m`} · {Math.round(p.speedKmh)} km/h · kurs{' '}
                 {Math.round(p.track)}°
               </span>
               {p.distKm > 0 && <span>{p.distKm.toFixed(0)} km od anteny</span>}
@@ -280,11 +472,11 @@ function ConfigForm({ cfg, setCfg, saved, status }: { cfg: AdsbConfig; setCfg: (
   const [steps, setSteps] = useState<{ step: string; ok: boolean; error: string }[]>([]);
   const set = (patch: Partial<AdsbConfig>) => setCfg({ ...cfg, ...patch });
   const dirty = JSON.stringify(cfg) !== JSON.stringify(saved);
-  const num = (v: string) => (v.trim() === '' ? 0 : Number(v.replace(',', '.')));
+  const [picking, setPicking] = useState(false);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if ((cfg.fr24 || cfg.adsbx) && cfg.lat === 0 && cfg.lon === 0) return setError('Ustaw położenie anteny (kliknij mapę).');
+    if ((cfg.fr24 || cfg.adsbx) && cfg.lat === 0 && cfg.lon === 0) return setError('Ustaw położenie anteny (Wskaż na mapie).');
     if (cfg.fr24 && !/^[A-Za-z0-9]{8,40}$/.test(cfg.fr24Key)) return setError('Podaj poprawny klucz Flightradar24 (litery i cyfry).');
     setError(null);
     setBusy(true);
@@ -306,18 +498,34 @@ function ConfigForm({ cfg, setCfg, saved, status }: { cfg: AdsbConfig; setCfg: (
       <h2>Konfiguracja</h2>
       {error && <Notice kind="danger">{error}</Notice>}
 
-      <h3 className="strong">Antena</h3>
+      <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+        <h3 className="strong">Antena</h3>
+        <button type="button" className="btn btn-sm" onClick={() => setPicking(true)}>
+          <MapPin size={16} /> Wskaż na mapie
+        </button>
+      </div>
       <div className="form-grid adsb-coords">
         <Field label="Szerokość geograficzna" htmlFor="adsb-lat">
-          <input id="adsb-lat" className="input input-code" inputMode="decimal" value={cfg.lat || ''} onChange={(e) => set({ lat: num(e.target.value) })} />
+          <NumberInput id="adsb-lat" value={cfg.lat} onChange={(v) => set({ lat: v })} />
         </Field>
         <Field label="Długość geograficzna" htmlFor="adsb-lon">
-          <input id="adsb-lon" className="input input-code" inputMode="decimal" value={cfg.lon || ''} onChange={(e) => set({ lon: num(e.target.value) })} />
+          <NumberInput id="adsb-lon" value={cfg.lon} onChange={(v) => set({ lon: v })} />
         </Field>
-        <Field label="Wysokość anteny (m n.p.m.)" htmlFor="adsb-alt" hint="Potrzebna do MLAT we Flightradar24.">
-          <input id="adsb-alt" className="input input-code" inputMode="decimal" value={cfg.altM || ''} onChange={(e) => set({ altM: num(e.target.value) })} />
+        <Field label="Wysokość anteny (m n.p.m.)" htmlFor="adsb-alt" hint="Teren + maszt. Potrzebna do MLAT we Flightradar24.">
+          <NumberInput id="adsb-alt" value={cfg.altM} onChange={(v) => set({ altM: v })} />
         </Field>
       </div>
+      {picking && (
+        <PickOnMapDialog
+          initial={{ lat: cfg.lat, lon: cfg.lon }}
+          mast={10}
+          onClose={() => setPicking(false)}
+          onPick={(lat, lon, altM) => {
+            set({ lat, lon, ...(altM != null ? { altM } : {}) });
+            setPicking(false);
+          }}
+        />
+      )}
 
       <hr />
       <h3 className="strong">Samoloty w aplikacjach TAK</h3>
@@ -341,15 +549,8 @@ function ConfigForm({ cfg, setCfg, saved, status }: { cfg: AdsbConfig; setCfg: (
                 onChange={(e) => set({ maxRangeKm: Number(e.target.value) })}
               />
             </Field>
-            <Field label="Maksymalna wysokość (ft)" htmlFor="adsb-maxalt" hint="0 = bez limitu. Np. 10 000 ft pokaże tylko lotnictwo nisko latające.">
-              <input
-                id="adsb-maxalt"
-                className="input input-code"
-                inputMode="numeric"
-                value={cfg.maxAltFt || ''}
-                placeholder="0"
-                onChange={(e) => set({ maxAltFt: Math.max(0, Math.round(num(e.target.value))) })}
-              />
+            <Field label="Maksymalna wysokość (m)" htmlFor="adsb-maxalt" hint="Puste = bez limitu. Np. 3000 m pokaże tylko lotnictwo nisko latające (śmigłowce, awionetki).">
+              <NumberInput id="adsb-maxalt" value={cfg.maxAltM} onChange={(v) => set({ maxAltM: Math.max(0, Math.round(v)) })} decimals={false} />
             </Field>
           </div>
           {serverList.length > 1 && (

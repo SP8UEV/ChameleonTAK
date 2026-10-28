@@ -102,7 +102,7 @@ func (b *adsbBridge) step(ctx context.Context) {
 	}
 	planes := snap.Planes(adsb.Filter{
 		Lat: cfg.ADSB.Lat, Lon: cfg.ADSB.Lon,
-		MaxRangeKm: float64(cfg.ADSB.MaxRangeKm), MaxAltFt: float64(cfg.ADSB.MaxAltFt),
+		MaxRangeKm: float64(cfg.ADSB.MaxRangeKm), MaxAltM: float64(cfg.ADSB.MaxAltM),
 	})
 	b.setRead(snap, "")
 	b.mu.Lock()
@@ -276,8 +276,8 @@ func (a *App) hPutADSB(w http.ResponseWriter, r *http.Request) {
 	case in.Lat < -90 || in.Lat > 90 || in.Lon < -180 || in.Lon > 180 || math.IsNaN(in.Lat) || math.IsNaN(in.Lon):
 		fail(w, invalid("Niepoprawne współrzędne anteny."))
 		return
-	case in.MaxRangeKm < 0 || in.MaxRangeKm > 1000 || in.MaxAltFt < 0 || in.MaxAltFt > 100000:
-		fail(w, invalid("Zasięg: 0–1000 km, wysokość: 0–100 000 ft."))
+	case in.MaxRangeKm < 0 || in.MaxRangeKm > 1000 || in.MaxAltM < 0 || in.MaxAltM > 30000:
+		fail(w, invalid("Zasięg: 0–1000 km, wysokość: 0–30 000 m."))
 		return
 	case in.FR24 && in.FR24Key == "":
 		fail(w, invalid("Podaj klucz Flightradar24 (sharing key)."))

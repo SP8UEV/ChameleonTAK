@@ -35,7 +35,7 @@ func TestPlanesFilter(t *testing.T) {
 	if len(all) != 5 { // no position and a 5-minute-old position are left out
 		t.Fatalf("got %d planes", len(all))
 	}
-	near := s.Planes(Filter{Lat: 52.17, Lon: 20.97, MaxRangeKm: 120, MaxAltFt: 30000})
+	near := s.Planes(Filter{Lat: 52.17, Lon: 20.97, MaxRangeKm: 120, MaxAltM: 9000})
 	got := map[string]bool{}
 	for _, p := range near {
 		got[p.Hex] = true
@@ -68,7 +68,7 @@ func TestCoT(t *testing.T) {
 	}
 	lot := s.Planes(Filter{})[0]
 	raw := string(lot.CoT(time.Minute))
-	for _, part := range []string{`lat="52.300000"`, `hae="10972.8"`, `callsign="LOT3NV"`, "SP-LWG", "squawk 2311", `course="92.5"`} {
+	for _, part := range []string{`lat="52.300000"`, `hae="10972.8"`, `callsign="LOT3NV"`, "SP-LWG", "10970 m", "836 km/h", "squawk 2311", `course="92.5"`} {
 		if !strings.Contains(raw, part) {
 			t.Errorf("missing %s in %s", part, raw)
 		}

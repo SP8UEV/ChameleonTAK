@@ -53,7 +53,7 @@ type ADSB struct {
 	Lon        float64  `json:"lon"`
 	AltM       float64  `json:"altM"`       // antenna height above sea level
 	MaxRangeKm int      `json:"maxRangeKm"` // 0 = no limit
-	MaxAltFt   int      `json:"maxAltFt"`   // 0 = no limit
+	MaxAltM    int      `json:"maxAltM"`    // 0 = no limit
 	Groups     []string `json:"groups"`     // empty = every client
 	Servers    []string `json:"servers"`    // servers that get the aircraft; empty = the main one
 	FR24       bool     `json:"fr24"`

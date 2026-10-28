@@ -491,7 +491,7 @@ export interface AdsbConfig {
   lon: number;
   altM: number;
   maxRangeKm: number;
-  maxAltFt: number;
+  maxAltM: number;
   groups: string[];
   /** Serwery, które dostają samoloty; pusta lista = serwer główny. */
   servers: string[];
@@ -514,9 +514,9 @@ export interface AdsbPlane {
   type: string;
   lat: number;
   lon: number;
-  altFt: number;
+  altM: number;
   ground: boolean;
-  speedKt: number;
+  speedKmh: number;
   track: number;
   category: string;
   squawk: string;
