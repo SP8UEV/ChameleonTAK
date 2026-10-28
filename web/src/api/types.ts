@@ -51,7 +51,7 @@ export interface LetsEncrypt {
 export type NetworkMode = 'lan' | 'hotspot';
 
 /** Jak telefony docierają do serwera: sieć lokalna, własna domena albo publiczny adres IP. */
-export type AccessMode = 'local' | 'domain' | 'ip';
+export type AccessMode = 'local' | 'domain' | 'ip' | 'zerotier';
 
 export interface PublicCertStatus {
   state: 'off' | 'pending' | 'ok' | 'error';
@@ -234,6 +234,28 @@ export interface Settings {
   /** Serwer, którego dotyczą ustawienia; false = dodatkowy serwer (panel, sieć i system są wspólne). */
   serverId: string;
   main: boolean;
+  /** Sieć ZeroTier urządzenia i adresy, które w niej dostało. */
+  zerotier: { network: string; ips: string[] };
+}
+
+export interface ZeroTierNetwork {
+  id: string;
+  name: string;
+  status: string;
+  addrs: string[];
+  device: string;
+}
+
+export interface ZeroTierStatus {
+  supported: boolean;
+  installed: boolean;
+  running: boolean;
+  online: boolean;
+  nodeId: string;
+  version: string;
+  network: string;
+  networks: ZeroTierNetwork[];
+  error: string;
 }
 
 export interface SettingsUpdateResult {
@@ -338,6 +360,8 @@ export interface JoinValid {
   publicCert: boolean;
   /** Serwer, do którego należy kod (kilka serwerów na jednym urządzeniu). */
   server?: string;
+  /** Sieć ZeroTier, do której telefon musi dołączyć ("" = niepotrzebna). */
+  zerotier?: string;
   /** Nazwa urzędu certyfikacji (widoczna w ustawieniach zaufania iOS). */
   caName: string;
   user: { username: string; callsign: string };

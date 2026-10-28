@@ -210,6 +210,27 @@ func (h *Helper) Available() bool {
 	return err == nil
 }
 
+// Output executes an action and returns what it printed on stdout (e.g. JSON status).
+func (h *Helper) Output(action string, args ...string) ([]byte, error) {
+	if !h.Available() {
+		return nil, ErrUnsupported
+	}
+	sysArgs := append([]string{"sys", action}, args...)
+	var cmd *exec.Cmd
+	if os.Geteuid() == 0 {
+		cmd = exec.Command(h.Bin, sysArgs...)
+	} else {
+		cmd = exec.Command("sudo", append([]string{"-n", h.Bin}, sysArgs...)...)
+	}
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("%s: %v: %s", action, err, strings.TrimSpace(stderr.String()))
+	}
+	return out, nil
+}
+
 // Run executes an action; secret values are passed on stdin.
 func (h *Helper) Run(stdin string, action string, args ...string) error {
 	if !h.Available() {

@@ -1,12 +1,12 @@
 import { useState } from 'react';
-import { Globe, House, LoaderCircle, Radar, Router } from 'lucide-react';
+import { Globe, House, LoaderCircle, Network, Radar, Router } from 'lucide-react';
 import { errorMessage } from '../api/client';
 import type { AccessMode, Ports, PublicCertStatus, PublicIP } from '../api/types';
 import { fmtDateTime, fmtRelative } from '../lib/format';
 import { Choice, Notice } from './ui';
 
-/** Wybór: sieć lokalna / własna domena / publiczny adres IP. */
-export function AccessChoice({ value, onChange }: { value: AccessMode; onChange: (m: AccessMode) => void }) {
+/** Wybór: sieć lokalna / własna domena / publiczny adres IP / ZeroTier (tylko w ustawieniach). */
+export function AccessChoice({ value, onChange, zerotier }: { value: AccessMode; onChange: (m: AccessMode) => void; zerotier?: boolean }) {
   return (
     <div className="choices">
       <Choice
@@ -36,6 +36,17 @@ export function AccessChoice({ value, onChange }: { value: AccessMode; onChange:
         title="Z internetu — publiczny adres IP"
         description="Bez domeny. Router musi mieć stały, publiczny adres IP."
       />
+      {zerotier && (
+        <Choice
+          type="radio"
+          name="access"
+          checked={value === 'zerotier'}
+          onChange={() => onChange('zerotier')}
+          icon={<Network size={18} />}
+          title="Z internetu — przez ZeroTier"
+          description="Bez publicznego IP i domeny. Telefony łączą się przez prywatną sieć ZeroTier."
+        />
+      )}
     </div>
   );
 }

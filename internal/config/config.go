@@ -62,6 +62,11 @@ type ADSB struct {
 	ADSBXUUID  string   `json:"adsbxUuid"`
 }
 
+// ZeroTier is the virtual network the device joined for access without a public address.
+type ZeroTier struct {
+	Network string `json:"network"` // 16-digit network ID; "" = not joined
+}
+
 type Network struct {
 	Mode            string `json:"mode"` // lan | hotspot
 	StaticIP        bool   `json:"staticIp"`
@@ -91,6 +96,7 @@ type Config struct {
 	DDNS               DDNS        `json:"ddns"`
 	PanelAccess        PanelAccess `json:"panelAccess"`
 	ADSB               ADSB        `json:"adsb"`
+	ZeroTier           ZeroTier    `json:"zerotier"`
 }
 
 func DefaultPorts() Ports {

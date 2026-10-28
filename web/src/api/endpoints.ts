@@ -37,6 +37,7 @@ import type {
   SystemInfo,
   User,
   UserInput,
+  ZeroTierStatus,
 } from './types';
 
 const enc = encodeURIComponent;
@@ -61,6 +62,10 @@ export const api = {
   system: () => http.get<SystemInfo>('/api/system'),
   publicAccess: () => http.get<PublicAccess>('/api/system/public-access'),
   publicIp: () => http.get<PublicIP>('/api/system/public-ip'),
+  zerotier: () => http.get<ZeroTierStatus>('/api/system/zerotier'),
+  zerotierInstall: () => http.post<ZeroTierStatus>('/api/system/zerotier/install'),
+  zerotierJoin: (network: string) => http.post<ZeroTierStatus>('/api/system/zerotier/join', { network }),
+  zerotierLeave: () => http.post<ZeroTierStatus>('/api/system/zerotier/leave'),
   ddnsUpdate: () => http.post<DdnsStatus>('/api/system/ddns/update'),
   portCheck: (fresh = false) => http.get<PortCheck>(`/api/system/port-check${fresh ? '?fresh=1' : ''}`),
   clientAddress: () => http.get<ClientAddress>('/api/system/client-address'),

@@ -5,7 +5,7 @@ import { api } from '../api/endpoints';
 import { errorMessage } from '../api/client';
 import type { JoinInfo, JoinOption, JoinValid, PlatformKey } from '../api/types';
 import { QrCode } from '../components/QrCode';
-import { BrandMark, CopyField, Disclosure, ErrorState, Loading } from '../components/ui';
+import { BrandMark, CopyField, Disclosure, ErrorState, Loading, Notice } from '../components/ui';
 import { fmtDateTime } from '../lib/format';
 import { detectPlatform, platformLabel } from '../lib/tak';
 
@@ -310,6 +310,13 @@ function JoinValidView({ info }: { info: JoinValid }) {
         </div>
       )}
 
+      {info.zerotier && (
+        <Notice kind="warn">
+          Ten serwer działa w sieci ZeroTier. Telefon musi mieć aplikację <strong>ZeroTier One</strong>, dołączyć do sieci{' '}
+          <span className="code">{info.zerotier}</span> i zostać autoryzowany przez administratora — dopiero wtedy aplikacja TAK się
+          połączy.
+        </Notice>
+      )}
       {option && guide ? (
         <>
           {option.platform === 'atak' && option.nativeQr.startsWith('tak://') ? (

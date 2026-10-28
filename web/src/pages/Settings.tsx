@@ -6,6 +6,7 @@ import type { AccessMode, DdnsConfig, NetworkMode, PlatformKey, Ports, Settings 
 import { AccessChoice, CertStatusView, DetectIpButton, PortForwarding } from '../components/PublicAccess';
 import { DdnsFields, DdnsStatusView } from '../components/Ddns';
 import { PortTest } from '../components/PortTest';
+import { ZeroTierPanel } from '../components/ZeroTier';
 import { AccessListForm, PasswordForm } from '../components/PanelSecurity';
 import { accessModeOf, isPublicIp, looksPublicDomain, validEmail } from '../lib/access';
 import { useSession } from '../app/session';
@@ -162,12 +163,14 @@ function useSaver(save: SaveFn) {
 
 /* ---------- Serwer ---------- */
 function ServerSection({ s, save }: { s: Settings; save: SaveFn }) {
-  const [access, setAccess] = useState<AccessMode>(() => accessModeOf(s.serverName));
+  const initialMode: AccessMode = s.zerotier.ips.includes(s.serverName) ? 'zerotier' : accessModeOf(s.serverName);
+  const [access, setAccess] = useState<AccessMode>(initialMode);
   // Osobny adres dla każdego trybu, żeby przełączanie trybów nie gubiło wpisanych wartości.
   const [names, setNames] = useState<Record<AccessMode, string>>(() => ({
-    local: accessModeOf(s.serverName) === 'local' ? s.serverName : '',
-    domain: accessModeOf(s.serverName) === 'domain' ? s.serverName : '',
-    ip: accessModeOf(s.serverName) === 'ip' ? s.serverName : '',
+    local: initialMode === 'local' ? s.serverName : '',
+    domain: initialMode === 'domain' ? s.serverName : '',
+    ip: initialMode === 'ip' ? s.serverName : '',
+    zerotier: initialMode === 'zerotier' ? s.serverName : '',
   }));
   const [leEnabled, setLeEnabled] = useState(s.letsEncrypt.enabled || accessModeOf(s.serverName) === 'local');
   const [leEmail, setLeEmail] = useState(s.letsEncrypt.email);
@@ -180,7 +183,7 @@ function ServerSection({ s, save }: { s: Settings; save: SaveFn }) {
   const { saving, run } = useSaver(save);
   const confirm = useConfirm();
   const serverName = names[access].trim();
-  const internet = access !== 'local';
+  const internet = access === 'domain' || access === 'ip';
   const le = { enabled: internet && leEnabled, email: internet && leEnabled ? leEmail.trim() : s.letsEncrypt.email };
   const nameChanged = serverName !== s.serverName;
   // Dynamiczny DNS ma sens tylko z domeną; w innych trybach wyłączamy go przy zapisie.
@@ -200,6 +203,7 @@ function ServerSection({ s, save }: { s: Settings; save: SaveFn }) {
     if (access === 'local' && (!serverName || /\s/.test(serverName))) return setError('Podaj adres serwera w sieci lokalnej.');
     if (access === 'domain' && !looksPublicDomain(serverName)) return setError('Podaj publiczną nazwę domenową, np. tak.twojafirma.pl.');
     if (access === 'ip' && !isPublicIp(serverName)) return setError('Podaj publiczny adres IP routera (nie adres z sieci lokalnej ani 100.64.x.x).');
+    if (access === 'zerotier' && !serverName) return setError('Dołącz do sieci ZeroTier i wybierz jej adres dla serwera.');
     if (le.enabled && le.email && !validEmail(le.email)) return setError('Niepoprawny adres e-mail dla Let’s Encrypt.');
     if (ddnsOut.provider === 'duckdns' && !/\.duckdns\.org$/i.test(serverName))
       return setError('Dla DuckDNS domena musi kończyć się na .duckdns.org.');
@@ -240,7 +244,10 @@ function ServerSection({ s, save }: { s: Settings; save: SaveFn }) {
       saving={saving}
     >
       {error && <Notice kind="danger">{error}</Notice>}
-      <AccessChoice value={access} onChange={setAccess} />
+      <AccessChoice value={access} onChange={setAccess} zerotier />
+      {access === 'zerotier' && (
+        <ZeroTierPanel main={s.main} address={names.zerotier} onAddress={(ip) => setNames({ ...names, zerotier: ip })} />
+      )}
       {access === 'local' && (
         <Field label="Adres w sieci lokalnej" htmlFor="st-name" hint="IP albo nazwa, pod którą telefony w sieci lokalnej widzą serwer.">
           <input

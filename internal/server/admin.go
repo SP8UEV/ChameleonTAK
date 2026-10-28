@@ -198,6 +198,7 @@ type settingsJSON struct {
 	Network            map[string]any     `json:"network"`
 	ServerID           string             `json:"serverId"`
 	Main               bool               `json:"main"`
+	ZeroTier           zerotierView       `json:"zerotier"`
 	DDNS               config.DDNS        `json:"ddns"`
 	PanelAccess        config.PanelAccess `json:"panelAccess"`
 }
@@ -220,7 +221,14 @@ func (a *App) hGetSettings(w http.ResponseWriter, r *http.Request) {
 func (a *App) settingsOut(c config.Config) settingsJSON {
 	v := settingsView(c)
 	v.ServerID, v.Main = a.ID(), a.parent == nil
+	v.ZeroTier = zerotierView{Network: a.host().cfg.Get().ZeroTier.Network, IPs: system.ZeroTierIPs()}
 	return v
+}
+
+// zerotierView tells the panel whether the server address is a ZeroTier one.
+type zerotierView struct {
+	Network string   `json:"network"`
+	IPs     []string `json:"ips"`
 }
 
 func validatePorts(p config.Ports) error {

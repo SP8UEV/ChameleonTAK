@@ -68,6 +68,9 @@ func RunSys(args []string, stdin io.Reader) error {
 	if strings.HasPrefix(action, "adsb-") {
 		return runADSB(action, rest, secret)
 	}
+	if strings.HasPrefix(action, "zerotier-") {
+		return runZeroTier(action, rest)
+	}
 
 	switch action {
 	case "set-time":
@@ -291,7 +294,7 @@ table inet chameleontak {
     ct state invalid drop
     iif "lo" accept
     meta l4proto { icmp, ipv6-icmp } accept
-    udp dport { 53, 67, 68, 5353 } accept
+    udp dport { 53, 67, 68, 5353, 9993 } accept
     tcp dport { 53 } accept
     tcp dport { ` + strings.Join(ps, ", ") + ` } accept
   }

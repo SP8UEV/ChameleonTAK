@@ -88,6 +88,7 @@ export function DeviceCard({
       </>
     );
   const host = settings?.serverName ?? '';
+  const ztNetwork = settings && settings.zerotier.ips.includes(host) ? settings.zerotier.network : '';
   const port = settings?.ports.cotTls;
   const enrollPort = settings?.ports.enroll;
 
@@ -109,6 +110,12 @@ export function DeviceCard({
         </div>
       </header>
 
+      {active && enr && ztNetwork && (
+        <Notice kind="warn">
+          Serwer działa przez ZeroTier: telefon musi najpierw mieć aplikację ZeroTier One, dołączyć do sieci{' '}
+          <span className="code">{ztNetwork}</span> i zostać autoryzowany na my.zerotier.com. Dopiero wtedy kod QR zadziała.
+        </Notice>
+      )}
       {active && enr ? (
         <div className="onboard">
           <div className="onboard-primary">
