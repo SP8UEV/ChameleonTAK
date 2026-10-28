@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
-import { CircleCheck, Clock, Download, ExternalLink, FolderOpen, KeyRound, LinkIcon, QrCode as QrIcon, Settings, ShieldAlert, type LucideIcon } from 'lucide-react';
+import { CircleCheck, Clock, Download, ExternalLink, FolderOpen, KeyRound, LinkIcon, QrCode as QrIcon, Settings, ShieldAlert, ShieldCheck, type LucideIcon } from 'lucide-react';
 import { api } from '../api/endpoints';
 import { errorMessage } from '../api/client';
 import type { JoinInfo, JoinOption, JoinValid, PlatformKey } from '../api/types';
@@ -98,6 +98,86 @@ function stepsFor(p: PlatformKey): { steps: Step[]; install: string } {
         install: 'WinTAK pobierzesz ze strony tak.gov.',
       };
   }
+}
+
+/**
+ * Rejestracja kodem QR zeskanowanym w iTAK/TAKAware. Aplikacja łączy się wtedy z portem rejestracji,
+ * więc telefon musi ufać certyfikatowi serwera: bez Let’s Encrypt najpierw instaluje się profil z CA.
+ */
+function InAppQr({ option, publicCert, caName }: { option: JoinOption; publicCert: boolean; caName: string }) {
+  const app = platformLabel(option.platform);
+  const scan =
+    option.platform === 'itak' ? (
+      <>
+        W iTAK stuknij <strong>Settings</strong> → <strong>Network</strong> → <strong>Servers</strong> → <strong>+</strong> →{' '}
+        <strong>Scan QR</strong> i zeskanuj kod poniżej (z ekranu innego urządzenia albo z panelu). Wymaga iTAK 2.12.3 lub nowszego.
+      </>
+    ) : (
+      <>
+        W TAKAware otwórz dodawanie serwera, wybierz skanowanie kodu QR i zeskanuj kod poniżej (z ekranu innego urządzenia albo z
+        panelu).
+      </>
+    );
+  return (
+    <Disclosure title={`Kod QR do zeskanowania w ${app}`} icon={<QrIcon size={18} />}>
+      <div className="stack">
+        {!publicCert && (
+          <>
+            <p className="small muted">
+              Raz na telefon trzeba zainstalować certyfikat serwera — bez niego {app} odrzuci połączenie.
+            </p>
+            <ol className="join-steps">
+              <li className="join-step">
+                <span className="join-step-icon">
+                  <ShieldCheck size={24} />
+                  <span className="join-step-num">1</span>
+                </span>
+                <span className="join-step-text stack-sm">
+                  <a className="btn btn-sm" href={api.caProfileUrl} style={{ alignSelf: 'flex-start' }}>
+                    <ShieldCheck size={16} /> Zainstaluj certyfikat serwera
+                  </a>
+                  <span>
+                    Stuknij przycisk, potem <strong>Zezwól</strong> i <strong>Zamknij</strong>.
+                  </span>
+                </span>
+              </li>
+              <li className="join-step">
+                <span className="join-step-icon">
+                  <Settings size={24} />
+                  <span className="join-step-num">2</span>
+                </span>
+                <span className="join-step-text">
+                  Otwórz <strong>Ustawienia</strong> iPhone’a → <strong>Pobrany profil</strong> (na górze listy) →{' '}
+                  <strong>Instaluj</strong>, podaj kod telefonu i potwierdź <strong>Instaluj</strong>.
+                </span>
+              </li>
+              <li className="join-step">
+                <span className="join-step-icon">
+                  <Settings size={24} />
+                  <span className="join-step-num">3</span>
+                </span>
+                <span className="join-step-text">
+                  <strong>Ustawienia</strong> → <strong>Ogólne</strong> → <strong>To urządzenie</strong> →{' '}
+                  <strong>Ustawienia zaufania certyfikatów</strong> → włącz <strong>{caName || 'certyfikat serwera'}</strong>.
+                </span>
+              </li>
+              <li className="join-step">
+                <span className="join-step-icon">
+                  <QrIcon size={24} />
+                  <span className="join-step-num">4</span>
+                </span>
+                <span className="join-step-text">{scan}</span>
+              </li>
+            </ol>
+          </>
+        )}
+        {publicCert && <p className="small muted">{scan}</p>}
+        <div style={{ display: 'flex', justifyContent: 'center' }}>
+          <QrCode value={option.nativeQr} size={260} label={`Kod QR dla ${app}`} />
+        </div>
+      </div>
+    </Disclosure>
+  );
 }
 
 function pickInitial(info: JoinValid): PlatformKey | null {
@@ -262,7 +342,10 @@ function JoinValidView({ info }: { info: JoinValid }) {
           <p className="small muted">{guide.install}</p>
 
           <div className="stack-sm">
-            {option.nativeQr && (
+            {option.nativeQr && (option.platform === 'itak' || option.platform === 'takaware') && (
+              <InAppQr option={option} publicCert={info.publicCert} caName={info.caName} />
+            )}
+            {option.nativeQr && option.platform !== 'itak' && option.platform !== 'takaware' && (
               <Disclosure title="Kod QR do zeskanowania w aplikacji" icon={<QrIcon size={18} />}>
                 <div className="stack-sm" style={{ alignItems: 'center', textAlign: 'center' }}>
                   <p className="small muted">

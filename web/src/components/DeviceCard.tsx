@@ -71,10 +71,22 @@ export function DeviceCard({
     }
   };
 
+  const scanPath = device.platform === 'itak' ? 'Settings → Network → Servers → + → Scan QR' : 'dodawanie serwera → skanuj QR';
   const nativeLabel =
-    device.platform === 'atak'
-      ? 'Albo zeskanuj aparatem telefonu z ATAK (5.1+) — otworzy ATAK i sam zaimportuje konfigurację'
-      : `Albo zeskanuj w aplikacji ${platformLabel(device.platform)}`;
+    device.platform === 'atak' ? (
+      'Albo zeskanuj aparatem telefonu z ATAK (5.1+) — otworzy ATAK i sam zaimportuje konfigurację'
+    ) : (
+      <>
+        Albo zeskanuj w aplikacji {platformLabel(device.platform)} ({scanPath}).
+        {!enr?.publicCert && (
+          <>
+            {' '}
+            Najpierw telefon musi zaufać serwerowi: otwórz na nim stronę dołączania i stuknij{' '}
+            <strong>Zainstaluj certyfikat serwera</strong>.
+          </>
+        )}
+      </>
+    );
   const host = settings?.serverName ?? '';
   const port = settings?.ports.cotTls;
   const enrollPort = settings?.ports.enroll;

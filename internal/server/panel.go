@@ -2,6 +2,11 @@ package server
 
 import (
 	"context"
+	"crypto/sha256"
+	"crypto/x509"
+	"encoding/base64"
+	"encoding/hex"
+	"encoding/xml"
 	"io/fs"
 	"net"
 	"net/http"
@@ -124,6 +129,7 @@ func (a *App) apiMux() *http.ServeMux {
 	pub("GET /api/join/{token}/package/{platform}", a.hJoinPackage)
 	pub("GET /api/join/{token}/{file}", a.hJoinPackage)
 	pub("GET /api/ca.pem", a.hCAPEM)
+	pub("GET /api/ca.mobileconfig", a.hCAMobileconfig)
 	pub("GET /api/truststore.p12", a.hTrustStore)
 
 	adm("GET /api/dashboard", a.hDashboard)
@@ -292,6 +298,87 @@ func (a *App) hTrustStore(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(p12)
 }
 
+func (a *App) caName() string {
+	if ca := a.pki.CACert(); ca != nil {
+		return ca.Subject.CommonName
+	}
+	return ""
+}
+
+// hCAMobileconfig serves our CA as an iOS configuration profile. Once installed and trusted
+// (Settings → General → About → Certificate Trust Settings), iOS apps such as iTAK and TAKAware
+// accept the server certificate, so their in-app QR enrollment works without Let's Encrypt.
+func (a *App) hCAMobileconfig(w http.ResponseWriter, r *http.Request) {
+	ca := a.pki.CACert()
+	if ca == nil {
+		httpError(w, 404, "CA jeszcze nie istnieje.")
+		return
+	}
+	w.Header().Set("Content-Type", "application/x-apple-aspen-config")
+	w.Header().Set("Content-Disposition", `attachment; filename="chameleontak-ca.mobileconfig"`)
+	w.Header().Set("Cache-Control", "no-store")
+	_, _ = w.Write(caMobileconfig(ca, a.cfg.Get().DisplayName))
+}
+
+// caMobileconfig builds an unsigned profile with one root certificate payload. Identifiers and
+// UUIDs derive from the CA, so installing the profile again replaces it instead of adding a copy.
+func caMobileconfig(ca *x509.Certificate, displayName string) []byte {
+	sum := sha256.Sum256(ca.Raw)
+	uuid := func(salt byte) string {
+		b := sha256.Sum256(append(sum[:], salt))
+		h := hex.EncodeToString(b[:16])
+		return strings.ToUpper(h[0:8] + "-" + h[8:12] + "-" + h[12:16] + "-" + h[16:20] + "-" + h[20:32])
+	}
+	esc := func(s string) string {
+		var b strings.Builder
+		_ = xml.EscapeText(&b, []byte(s))
+		return b.String()
+	}
+	id := "pl.chameleontak.ca." + hex.EncodeToString(sum[:8])
+	return []byte(`<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>PayloadContent</key>
+	<array>
+		<dict>
+			<key>PayloadCertificateFileName</key>
+			<string>chameleontak-ca.cer</string>
+			<key>PayloadContent</key>
+			<data>` + base64.StdEncoding.EncodeToString(ca.Raw) + `</data>
+			<key>PayloadDescription</key>
+			<string>Certyfikat urzędu serwera TAK</string>
+			<key>PayloadDisplayName</key>
+			<string>` + esc(ca.Subject.CommonName) + `</string>
+			<key>PayloadIdentifier</key>
+			<string>` + id + `.cert</string>
+			<key>PayloadType</key>
+			<string>com.apple.security.root</string>
+			<key>PayloadUUID</key>
+			<string>` + uuid(1) + `</string>
+			<key>PayloadVersion</key>
+			<integer>1</integer>
+		</dict>
+	</array>
+	<key>PayloadDescription</key>
+	<string>Pozwala aplikacjom TAK (iTAK, TAKAware) zaufać serwerowi ` + esc(displayName) + `.</string>
+	<key>PayloadDisplayName</key>
+	<string>` + esc(displayName) + ` — certyfikat serwera</string>
+	<key>PayloadIdentifier</key>
+	<string>` + id + `</string>
+	<key>PayloadRemovalDisallowed</key>
+	<false/>
+	<key>PayloadType</key>
+	<string>Configuration</string>
+	<key>PayloadUUID</key>
+	<string>` + uuid(0) + `</string>
+	<key>PayloadVersion</key>
+	<integer>1</integer>
+</dict>
+</plist>
+`)
+}
+
 // panelBaseURL is the address the administrator opens the panel at.
 func (a *App) panelBaseURL() string {
 	cfg := a.cfg.Get()
@@ -362,7 +449,7 @@ func phonePath(p string) bool {
 		}
 	}
 	switch p {
-	case "/api/status", "/favicon-64.png", "/apple-touch-icon.png":
+	case "/api/status", "/api/ca.mobileconfig", "/favicon-64.png", "/apple-touch-icon.png":
 		return true
 	}
 	return false

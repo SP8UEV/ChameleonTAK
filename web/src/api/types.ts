@@ -193,6 +193,8 @@ export interface Enrollment {
   used: boolean;
   joinUrl: string;
   qr: { join: string; native: string };
+  /** Telefon ufa portowi rejestracji bez instalowania profilu (Let’s Encrypt). */
+  publicCert: boolean;
 }
 
 export interface Device {
@@ -270,6 +272,9 @@ export interface JoinValid {
   expiresAt: string;
   displayName: string;
   serverName: string;
+  publicCert: boolean;
+  /** Nazwa urzędu certyfikacji (widoczna w ustawieniach zaufania iOS). */
+  caName: string;
   user: { username: string; callsign: string };
   device: { id: number; name: string; platform: PlatformKey };
   options: JoinOption[];

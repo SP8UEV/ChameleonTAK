@@ -24,6 +24,9 @@ type enrollmentJSON struct {
 	Valid     bool              `json:"valid"`
 	JoinURL   string            `json:"joinUrl"`
 	QR        map[string]string `json:"qr"`
+	// PublicCert: phones trust the enrollment port as they are; otherwise iOS apps need our CA
+	// installed as a profile before the in-app QR works.
+	PublicCert bool `json:"publicCert"`
 }
 
 type deviceJSON struct {
@@ -96,8 +99,9 @@ func (a *App) deviceView(u *store.User, d *store.Device, online map[int64]bool) 
 			Token: t.Token, ExpiresAt: t.ExpiresAt, Used: !t.UsedAt.IsZero(), Valid: tokenUsable(t), JoinURL: join,
 			QR: map[string]string{
 				"join":   join,
-				"native": datapkg.NativeQR(d.Platform, cfg, u.Username, t.Token, joinPackageURL(base, t.Token, d.Platform), a.publicCert()),
+				"native": datapkg.NativeQR(d.Platform, cfg, u.Username, t.Token, joinPackageURL(base, t.Token, d.Platform)),
 			},
+			PublicCert: a.publicCert(),
 		}
 	}
 	return dj
@@ -653,7 +657,7 @@ func (a *App) hJoin(w http.ResponseWriter, r *http.Request) {
 			"platform":   p,
 			"label":      config.PlatformLabel(p),
 			"packageUrl": "/api/join/" + t.Token + "/package/" + p,
-			"nativeQr":   datapkg.NativeQR(p, cfg, u.Username, t.Token, joinPackageURL(base, t.Token, p), a.publicCert()),
+			"nativeQr":   datapkg.NativeQR(p, cfg, u.Username, t.Token, joinPackageURL(base, t.Token, p)),
 			"manual": map[string]any{
 				"host": cfg.ServerName, "port": cfg.Ports.CoTTLS, "enrollPort": cfg.Ports.Enroll,
 				"username": u.Username, "password": t.Token,
@@ -662,6 +666,7 @@ func (a *App) hJoin(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, 200, map[string]any{
 		"valid": true, "expiresAt": t.ExpiresAt, "displayName": cfg.DisplayName, "serverName": cfg.ServerName,
+		"publicCert": a.publicCert(), "caName": a.caName(),
 		"user":    map[string]string{"username": u.Username, "callsign": u.Callsign},
 		"device":  map[string]any{"id": d.ID, "name": d.Name, "platform": d.Platform},
 		"options": options,

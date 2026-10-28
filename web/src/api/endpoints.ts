@@ -106,5 +106,6 @@ export const api = {
   certs: () => http.get<Cert[]>('/api/certs'),
   revokeCert: (serial: string) => http.post<void>(`/api/certs/${enc(serial)}/revoke`),
   caPemUrl: '/api/ca.pem',
+  caProfileUrl: '/api/ca.mobileconfig',
   truststoreUrl: '/api/truststore.p12',
 };
