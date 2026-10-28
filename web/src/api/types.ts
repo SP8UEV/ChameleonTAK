@@ -628,3 +628,43 @@ export interface ServerLoad {
   memTotal: number;
   memAvail: number;
 }
+
+/* ---------- Wideo na żywo ---------- */
+export type StreamAudience = 'all' | 'groups' | 'users';
+
+export interface VideoStream {
+  id: string;
+  name: string;
+  audience: StreamAudience;
+  groups: string[];
+  users: string[];
+  publishKey: string;
+  createdAt: string;
+  path: string;
+  live: boolean;
+  viewers: number;
+  publishUrl: string;
+  larixUrl: string;
+}
+
+export interface VideoService {
+  supported: boolean;
+  installed: boolean;
+  enabled: boolean;
+  active: boolean;
+  error: string;
+  rtmpPort: number;
+  rtspPort: number;
+}
+
+export interface VideoStreamList {
+  streams: VideoStream[];
+  service: VideoService;
+}
+
+export interface StreamInput {
+  name: string;
+  audience: StreamAudience;
+  groups: string[];
+  users: string[];
+}

@@ -1547,3 +1547,48 @@
 .net-verdict.net-danger {
   background: var(--danger-soft);
 }
+
+/* ================= Wideo ================= */
+.video-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--sp-4);
+}
+.video-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+.video-card.live {
+  border-color: var(--danger);
+}
+.video-live svg {
+  animation: video-pulse 1.4s ease-in-out infinite;
+}
+@keyframes video-pulse {
+  50% {
+    opacity: 0.3;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .video-live svg {
+    animation: none;
+  }
+}
+.video-publish {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--sp-4);
+  align-items: center;
+}
+@media (max-width: 640px) {
+  .video-publish {
+    grid-template-columns: 1fr;
+  }
+}
+.video-preview {
+  width: 100%;
+  max-height: 60vh;
+  background: #000;
+  border-radius: var(--r-md);
+}

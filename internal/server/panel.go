@@ -143,6 +143,7 @@ func (a *App) apiMux() *http.ServeMux {
 	pub("GET /api/ca.pem", a.hCAPEM)
 	pub("GET /api/ca.mobileconfig", a.hCAMobileconfig)
 	pub("GET /api/truststore.p12", a.hTrustStore)
+	pub("POST /api/video/auth", a.hVideoAuth) // MediaMTX on loopback; checked inside
 
 	adm("GET /api/dashboard", a.hDashboard)
 	adm("GET /api/settings", a.hGetSettings)
@@ -156,6 +157,15 @@ func (a *App) apiMux() *http.ServeMux {
 	adm("GET /api/system/speedtest/down", a.hSpeedDown)
 	adm("POST /api/system/speedtest/up", a.hSpeedUp)
 	adm("GET /api/system/speedtest/ping", a.hSpeedPing)
+	adm("GET /api/system/video", a.hVideoService)
+	adm("POST /api/system/video/install", a.hVideoInstall)
+	adm("POST /api/system/video/enable", a.hVideoEnable)
+	adm("GET /api/video/streams", a.hListStreams)
+	adm("POST /api/video/streams", a.hCreateStream)
+	adm("PUT /api/video/streams/{id}", a.hUpdateStream)
+	adm("DELETE /api/video/streams/{id}", a.hDeleteStream)
+	adm("GET /api/video/hls/{server}/{id}/{rest...}", a.hStreamHLS)
+	adm("GET /api/video/audience", a.hStreamAudience)
 	adm("GET /api/system/zerotier", a.hZeroTier)
 	adm("POST /api/system/zerotier/install", a.hZeroTierInstall)
 	adm("POST /api/system/zerotier/join", a.hZeroTierJoin)
@@ -488,7 +498,7 @@ func phonePath(p string) bool {
 		}
 	}
 	switch p {
-	case "/api/status", "/api/ca.mobileconfig", "/favicon-64.png", "/apple-touch-icon.png":
+	case "/api/status", "/api/ca.mobileconfig", "/favicon-64.png", "/apple-touch-icon.png", "/api/video/auth":
 		return true
 	}
 	return false

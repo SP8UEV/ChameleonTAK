@@ -68,6 +68,9 @@ func RunSys(args []string, stdin io.Reader) error {
 	if strings.HasPrefix(action, "adsb-") {
 		return runADSB(action, rest, secret)
 	}
+	if strings.HasPrefix(action, "video-") {
+		return runVideo(action, rest)
+	}
 	if strings.HasPrefix(action, "zerotier-") {
 		return runZeroTier(action, rest)
 	}

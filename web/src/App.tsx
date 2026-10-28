@@ -25,6 +25,7 @@ const Certificates = lazy(() => import('./pages/Certificates'));
 const SettingsPage = lazy(() => import('./pages/Settings'));
 const AdsbPage = lazy(() => import('./pages/Adsb'));
 const ServersPage = lazy(() => import('./pages/Servers'));
+const VideoPage = lazy(() => import('./pages/Video'));
 const NotFound = lazy(() => import('./pages/NotFound'));
 
 const PUBLIC_PREFIXES = ['/login', '/join/', '/setup'];
@@ -103,6 +104,7 @@ export default function App() {
               <Route path="/certs" element={<Certificates />} />
               <Route path="/adsb" element={<AdsbPage />} />
               <Route path="/servers" element={<ServersPage />} />
+              <Route path="/video" element={<VideoPage />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="*" element={<NotFound />} />
             </Route>

@@ -57,6 +57,7 @@ type App struct {
 	public  *publicCerts
 	ddns    *ddnsUpdater
 	adsb    *adsbBridge
+	video   *videoState // live paths reported by the media server (main server)
 	ports   portChecker
 	api     http.Handler // the panel API of this server
 
@@ -125,6 +126,7 @@ func New(opts Options, log *slog.Logger) (*App, error) {
 	a.public = newPublicCerts(a)
 	a.ddns = newDDNS(a)
 	a.adsb = newADSB(a)
+	a.video = &videoState{paths: map[string]videoPath{}, pushed: map[string]time.Time{}}
 	a.api = a.apiMux()
 	return a, nil
 }
@@ -157,6 +159,7 @@ func (a *App) Run(ctx context.Context) error {
 	go a.public.run(ctx)
 	go a.ddns.run(ctx)
 	go a.adsb.run(ctx)
+	go a.videoLoop(ctx)
 	if cfg.SetupDone {
 		a.startOthers()
 		if err := a.applyFirewall(); err != nil && !errors.Is(err, system.ErrUnsupported) {

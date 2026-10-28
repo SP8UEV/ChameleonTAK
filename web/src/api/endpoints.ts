@@ -1,4 +1,4 @@
-import { http, withServer } from './client';
+import { currentServer, http, withServer } from './client';
 import type {
   AdsbConfig,
   AdsbInfo,
@@ -39,6 +39,10 @@ import type {
   SystemInfo,
   User,
   UserInput,
+  StreamInput,
+  VideoService,
+  VideoStream,
+  VideoStreamList,
   ZeroTierStatus,
 } from './types';
 
@@ -66,6 +70,14 @@ export const api = {
   publicIp: () => http.get<PublicIP>('/api/system/public-ip'),
   speedInternet: () => http.post<{ internet: InternetSpeed; load: ServerLoad }>('/api/system/speedtest/internet'),
   speedLoad: () => http.get<ServerLoad>('/api/system/speedtest/load'),
+  videoStreams: () => http.get<VideoStreamList>('/api/video/streams'),
+  createStream: (s: StreamInput) => http.post<VideoStream>('/api/video/streams', s),
+  updateStream: (id: string, s: StreamInput) => http.put<VideoStream>(`/api/video/streams/${enc(id)}`, s),
+  deleteStream: (id: string) => http.del<void>(`/api/video/streams/${enc(id)}`),
+  streamAudience: () => http.get<{ users: string[]; groups: string[] }>('/api/video/audience'),
+  streamHlsUrl: (id: string) => `/api/video/hls/${enc(currentServer())}/${enc(id)}/index.m3u8`,
+  videoInstall: () => http.post<VideoService>('/api/system/video/install'),
+  videoEnable: (enabled: boolean) => http.post<VideoService>('/api/system/video/enable', { enabled }),
   zerotier: () => http.get<ZeroTierStatus>('/api/system/zerotier'),
   zerotierInstall: () => http.post<ZeroTierStatus>('/api/system/zerotier/install'),
   zerotierJoin: (network: string) => http.post<ZeroTierStatus>('/api/system/zerotier/join', { network }),

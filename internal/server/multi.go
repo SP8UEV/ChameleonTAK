@@ -250,11 +250,11 @@ func hostOnly(p string) bool {
 	case p == "/api/system/public-access", p == "/api/system/ddns/update":
 		return false // per server: its own address and certificate
 	case strings.HasPrefix(p, "/api/system/"), strings.HasPrefix(p, "/api/setup"), strings.HasPrefix(p, "/api/me"),
-		strings.HasPrefix(p, "/api/adsb"), strings.HasPrefix(p, "/api/servers"):
+		strings.HasPrefix(p, "/api/adsb"), strings.HasPrefix(p, "/api/servers"), strings.HasPrefix(p, "/api/video/hls/"):
 		return true
 	}
 	switch p {
-	case "/api/status", "/api/login", "/api/logout":
+	case "/api/status", "/api/login", "/api/logout", "/api/video/auth":
 		return true
 	}
 	return false

@@ -99,6 +99,7 @@ func (a *App) martiHandler() http.Handler {
 	m.HandleFunc("PUT /Marti/api/groups/active", a.mGroupsActive)
 	m.HandleFunc("PUT /Marti/api/groups/activebits", a.mGroupsActive)
 	m.HandleFunc("GET /Marti/api/util/user/roles", a.mRoles)
+	m.HandleFunc("GET /Marti/vcm", a.mVideoConnections)
 
 	// File / data package sync
 	m.HandleFunc("POST /Marti/sync/missionupload", a.mMissionUpload)

@@ -18,6 +18,7 @@ import {
   ShieldCheck,
   Sun,
   Users,
+  Video,
   type LucideIcon,
 } from 'lucide-react';
 import { api } from '../api/endpoints';
@@ -46,6 +47,7 @@ const NAV_MAIN: NavDef[] = [
 const NAV_DATA: NavDef[] = [
   { to: '/files', label: 'Pliki', icon: Files },
   { to: '/missions', label: 'Misje', icon: Flag },
+  { to: '/video', label: 'Wideo na żywo', icon: Video },
   { to: '/adsb', label: 'ADS-B', icon: Plane },
 ];
 const NAV_SERVER: NavDef[] = [

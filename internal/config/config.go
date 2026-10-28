@@ -67,6 +67,23 @@ type ZeroTier struct {
 	Network string `json:"network"` // 16-digit network ID; "" = not joined
 }
 
+// VideoService is the device's media server for live video (main server only).
+type VideoService struct {
+	Enabled bool   `json:"enabled"`
+	Secret  string `json:"secret"` // signs the viewers' stream passwords
+}
+
+// VideoStream is a live camera feed from a phone, shown to an audience of TAK users.
+type VideoStream struct {
+	ID         string    `json:"id"`
+	Name       string    `json:"name"`
+	Audience   string    `json:"audience"` // all | groups | users
+	Groups     []string  `json:"groups"`
+	Users      []string  `json:"users"`
+	PublishKey string    `json:"publishKey"`
+	CreatedAt  time.Time `json:"createdAt"`
+}
+
 type Network struct {
 	Mode            string `json:"mode"` // lan | hotspot
 	StaticIP        bool   `json:"staticIp"`
@@ -76,27 +93,29 @@ type Network struct {
 }
 
 type Config struct {
-	SetupDone          bool        `json:"setupDone"`
-	NodeID             string      `json:"nodeId"`
-	ServerName         string      `json:"serverName"`
-	DisplayName        string      `json:"displayName"`
-	Organization       string      `json:"organization"`
-	Ports              Ports       `json:"ports"`
-	Platforms          []string    `json:"platforms"`
-	CertValidityDays   int         `json:"certValidityDays"`
-	TokenValidityHours int         `json:"tokenValidityHours"`
-	CertPassword       string      `json:"certPassword"`
-	ForceHTTPS         bool        `json:"forceHttps"`
-	LetsEncrypt        LetsEncrypt `json:"letsEncrypt"`
-	Profile            Profile     `json:"profile"`
-	MapTileURL         string      `json:"mapTileUrl"`
-	SSHEnabled         bool        `json:"sshEnabled"`
-	ProfileUpdatedAt   time.Time   `json:"profileUpdatedAt"` // last change of the device profile settings
-	Network            Network     `json:"network"`
-	DDNS               DDNS        `json:"ddns"`
-	PanelAccess        PanelAccess `json:"panelAccess"`
-	ADSB               ADSB        `json:"adsb"`
-	ZeroTier           ZeroTier    `json:"zerotier"`
+	SetupDone          bool          `json:"setupDone"`
+	NodeID             string        `json:"nodeId"`
+	ServerName         string        `json:"serverName"`
+	DisplayName        string        `json:"displayName"`
+	Organization       string        `json:"organization"`
+	Ports              Ports         `json:"ports"`
+	Platforms          []string      `json:"platforms"`
+	CertValidityDays   int           `json:"certValidityDays"`
+	TokenValidityHours int           `json:"tokenValidityHours"`
+	CertPassword       string        `json:"certPassword"`
+	ForceHTTPS         bool          `json:"forceHttps"`
+	LetsEncrypt        LetsEncrypt   `json:"letsEncrypt"`
+	Profile            Profile       `json:"profile"`
+	MapTileURL         string        `json:"mapTileUrl"`
+	SSHEnabled         bool          `json:"sshEnabled"`
+	ProfileUpdatedAt   time.Time     `json:"profileUpdatedAt"` // last change of the device profile settings
+	Network            Network       `json:"network"`
+	DDNS               DDNS          `json:"ddns"`
+	PanelAccess        PanelAccess   `json:"panelAccess"`
+	ADSB               ADSB          `json:"adsb"`
+	ZeroTier           ZeroTier      `json:"zerotier"`
+	Video              VideoService  `json:"video"`
+	Streams            []VideoStream `json:"streams"`
 }
 
 func DefaultPorts() Ports {
@@ -193,6 +212,7 @@ func (m *Manager) Get() Config {
 	c.PanelAccess.Allow = append([]string(nil), m.cfg.PanelAccess.Allow...)
 	c.ADSB.Groups = append([]string(nil), m.cfg.ADSB.Groups...)
 	c.ADSB.Servers = append([]string(nil), m.cfg.ADSB.Servers...)
+	c.Streams = copyStreams(m.cfg.Streams)
 	c.Profile.ExtraPrefs = make(map[string]string, len(m.cfg.Profile.ExtraPrefs))
 	for k, v := range m.cfg.Profile.ExtraPrefs {
 		c.Profile.ExtraPrefs[k] = v
@@ -209,6 +229,7 @@ func (m *Manager) Update(fn func(c *Config) error) (Config, error) {
 	c.PanelAccess.Allow = append([]string(nil), m.cfg.PanelAccess.Allow...)
 	c.ADSB.Groups = append([]string(nil), m.cfg.ADSB.Groups...)
 	c.ADSB.Servers = append([]string(nil), m.cfg.ADSB.Servers...)
+	c.Streams = copyStreams(m.cfg.Streams)
 	extra := make(map[string]string, len(m.cfg.Profile.ExtraPrefs))
 	for k, v := range m.cfg.Profile.ExtraPrefs {
 		extra[k] = v
@@ -228,4 +249,14 @@ func randomHex(n int) string {
 	b := make([]byte, n)
 	_, _ = rand.Read(b)
 	return hex.EncodeToString(b)
+}
+
+func copyStreams(in []VideoStream) []VideoStream {
+	out := make([]VideoStream, len(in))
+	for i, v := range in {
+		v.Groups = append([]string(nil), v.Groups...)
+		v.Users = append([]string(nil), v.Users...)
+		out[i] = v
+	}
+	return out
 }

@@ -119,6 +119,15 @@ func (a *App) runPortCheck(ctx context.Context) *portCheckResult {
 	listening := system.ListeningTCP()
 
 	known := serverPorts(cfg, addrPort(a.panelHTTPAddr(), cfg.Ports.HTTP), addrPort(a.panelHTTPSAddr(), cfg.Ports.HTTPS))
+	if cfg.Video.Enabled {
+		w := "closed"
+		if mode != "local" {
+			w = "open"
+		}
+		known = append(known,
+			knownPort{system.VideoRTMPPort, system.VideoRTMPPort, "Wideo: nadawanie z telefonów (RTMP)", w, "kamery telefonów spoza sieci lokalnej"},
+			knownPort{system.VideoRTSPPort, system.VideoRTSPPort, "Wideo: oglądanie w TAK (RTSP)", w, "oglądanie wideo spoza sieci lokalnej"})
+	}
 	// Every additional server needs its TAK ports the same way as the main one.
 	for _, s := range a.servers()[1:] {
 		sc := s.cfg.Get()

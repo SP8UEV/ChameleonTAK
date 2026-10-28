@@ -173,6 +173,9 @@ func (a *App) applyFirewall() error {
 	for _, s := range a.servers()[1:] {
 		ports = append(ports, takPorts(s.cfg.Get().Ports)...)
 	}
+	if cfg.Video.Enabled {
+		ports = append(ports, system.VideoRTMPPort, system.VideoRTSPPort)
+	}
 	var s []string
 	for _, p := range ports {
 		s = append(s, fmt.Sprint(p))
