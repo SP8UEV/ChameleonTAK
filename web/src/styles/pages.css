@@ -1471,3 +1471,12 @@
   padding-top: 4px;
   padding-bottom: 4px;
 }
+
+.adsb-antenna-pending {
+  background: #f2b84b;
+  box-shadow: 0 0 0 2px #f2b84b, 0 1px 4px rgb(0 0 0 / 0.4);
+}
+.adsb-confirm {
+  gap: 6px;
+  min-width: 190px;
+}

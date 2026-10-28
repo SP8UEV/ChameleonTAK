@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import L from 'leaflet';
 import { Circle, MapContainer, Marker, Popup, TileLayer, useMap, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
-import { Antenna, Cpu, Download, ExternalLink, Globe, LoaderCircle, LocateFixed, MapPin, Mountain, Plane, Radio, Save, Send } from 'lucide-react';
+import { Antenna, Cpu, Download, ExternalLink, Globe, LoaderCircle, LocateFixed, MapPin, Plane, Radio, Save, Send } from 'lucide-react';
 import { api } from '../api/endpoints';
 import { errorMessage } from '../api/client';
 import type { AdsbConfig, AdsbInfo, AdsbPlane, AdsbStatus } from '../api/types';
@@ -42,13 +42,13 @@ function AdsbView({ info, reload }: { info: AdsbInfo; reload: () => Promise<void
       )}
       <StatusCards st={st} cfg={info.config} reload={reload} />
       <section className="card adsb-map-card">
-        <AdsbMap cfg={cfg} planes={st.planes} onPick={(lat, lon) => setCfg({ ...cfg, lat, lon })} />
+        <AdsbMap cfg={cfg} planes={st.planes} />
         <div className="adsb-map-foot small muted">
           <span>
             <Plane size={14} /> {st.planes.length} {planesWord(st.planes.length)} w zasięgu
             {cfg.maxRangeKm > 0 ? ` ${cfg.maxRangeKm} km` : ''}
           </span>
-          <span>Kliknij mapę, aby ustawić położenie anteny.</span>
+          <span>Położenie anteny zmienisz w konfiguracji („Wskaż na mapie”).</span>
           {st.tar1090 && (
             <a href={st.tar1090} target="_blank" rel="noreferrer">
               Pełna mapa tar1090 <ExternalLink size={14} />
@@ -242,7 +242,33 @@ async function terrainElevation(lat: number, lon: number): Promise<number | null
   }
 }
 
-/** Okno „Wskaż na mapie”: kliknięcie albo przeciągnięcie znacznika ustawia antenę. */
+const pendingIcon = L.divIcon({
+  className: 'adsb-antenna',
+  html: '<span class="adsb-antenna-dot adsb-antenna-pending"></span>',
+  iconSize: [22, 22],
+  iconAnchor: [11, 11],
+  popupAnchor: [0, -12],
+});
+
+/** Znacznik wskazanego miejsca z dymkiem „Ustawić antenę tutaj?”, otwartym od razu. */
+function PendingMarker({ lat, lon, children }: { lat: number; lon: number; children: ReactNode }) {
+  const ref = useRef<L.Marker | null>(null);
+  useEffect(() => {
+    ref.current?.openPopup();
+  }, [lat, lon]);
+  return (
+    <Marker ref={ref} position={[lat, lon]} icon={pendingIcon}>
+      <Popup closeButton={false} autoPan>
+        {children}
+      </Popup>
+    </Marker>
+  );
+}
+
+/**
+ * Okno „Wskaż na mapie”: kliknięcie wskazuje miejsce, a antena przenosi się dopiero po
+ * potwierdzeniu „Tak, tutaj” w dymku.
+ */
 function PickOnMapDialog({
   initial,
   mast,
@@ -257,7 +283,7 @@ function PickOnMapDialog({
   const { settings } = useSession();
   const tileUrl = settings?.mapTileUrl?.trim() || DEFAULT_TILES;
   const has = initial.lat !== 0 || initial.lon !== 0;
-  const [pos, setPos] = useState<{ lat: number; lon: number } | null>(has ? initial : null);
+  const [pos, setPos] = useState<{ lat: number; lon: number } | null>(null); // wskazane, niepotwierdzone
   const [ground, setGround] = useState<number | null>(null);
   const [mastM, setMastM] = useState(mast);
   const [locating, setLocating] = useState(false);
@@ -298,49 +324,53 @@ function PickOnMapDialog({
       onClose={onClose}
       wide
       footer={
-        <>
-          <button type="button" className="btn" onClick={onClose}>
-            Anuluj
-          </button>
-          <button
-            type="button"
-            className="btn btn-primary"
-            disabled={!pos}
-            onClick={() => pos && onPick(pos.lat, pos.lon, ground != null ? ground + mastM : null)}
-          >
-            <MapPin size={18} /> Ustaw tutaj
-          </button>
-        </>
+        <button type="button" className="btn" onClick={onClose}>
+          Anuluj
+        </button>
       }
     >
       <div className="stack-sm">
-        <p className="small muted">Kliknij miejsce anteny albo przeciągnij znacznik. Przybliż mapę, żeby trafić w dach.</p>
-        <MapContainer center={pos ? [pos.lat, pos.lon] : POLAND} zoom={pos ? 16 : 6} className="adsb-pick-map" scrollWheelZoom>
+        <p className="small muted">
+          Kliknij miejsce anteny i potwierdź w dymku. Przybliż mapę, żeby trafić w dach.
+          {has ? ' Turkusowy punkt to obecne położenie.' : ''}
+        </p>
+        <MapContainer center={has ? [initial.lat, initial.lon] : POLAND} zoom={has ? 16 : 6} className="adsb-pick-map" scrollWheelZoom>
           <TileLayer url={tileUrl} attribution="&copy; OpenStreetMap" />
           <FixSize />
           <ClickToPick onPick={(lat, lon) => setPos({ lat, lon })} />
+          {has && <Marker position={[initial.lat, initial.lon]} icon={antennaIcon} />}
           {pos && <FlyTo lat={pos.lat} lon={pos.lon} />}
           {pos && (
-            <Marker
-              position={[pos.lat, pos.lon]}
-              icon={antennaIcon}
-              draggable
-              eventHandlers={{
-                dragend: (e) => {
-                  const ll = (e.target as L.Marker).getLatLng();
-                  setPos({ lat: round5(ll.lat), lon: round5(ll.lng) });
-                },
-              }}
-            />
+            <PendingMarker lat={pos.lat} lon={pos.lon}>
+              <div className="stack-sm adsb-confirm">
+                <strong>Ustawić antenę tutaj?</strong>
+                <span className="code">
+                  {pos.lat.toFixed(5)}, {pos.lon.toFixed(5)}
+                </span>
+                <span>
+                  teren {ground != null ? `${ground} m` : '…'}
+                  {ground != null ? ` · antena ${ground + mastM} m n.p.m.` : ''}
+                </span>
+                <div className="row" style={{ gap: 6 }}>
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-primary"
+                    onClick={() => onPick(pos.lat, pos.lon, ground != null ? ground + mastM : null)}
+                  >
+                    <MapPin size={14} /> Tak, tutaj
+                  </button>
+                  <button type="button" className="btn btn-sm" onClick={() => setPos(null)}>
+                    Nie
+                  </button>
+                </div>
+              </div>
+            </PendingMarker>
           )}
         </MapContainer>
         <div className="adsb-pick-info small">
-          <span className="code">{pos ? `${pos.lat.toFixed(5)}, ${pos.lon.toFixed(5)}` : 'nie wybrano'}</span>
-          {pos && (
-            <span className="row" style={{ gap: 4 }}>
-              <Mountain size={14} /> teren: {ground != null ? `${ground} m n.p.m.` : '…'}
-            </span>
-          )}
+          <span className="code">
+            {has ? `obecnie ${initial.lat.toFixed(5)}, ${initial.lon.toFixed(5)}` : 'antena nie jest jeszcze ustawiona'}
+          </span>
           <label className="row" style={{ gap: 6 }}>
             maszt / wysokość nad terenem
             <input
@@ -410,7 +440,7 @@ function Recenter({ lat, lon, has }: { lat: number; lon: number; has: boolean })
   return null;
 }
 
-function AdsbMap({ cfg, planes, onPick }: { cfg: AdsbConfig; planes: AdsbPlane[]; onPick: (lat: number, lon: number) => void }) {
+function AdsbMap({ cfg, planes }: { cfg: AdsbConfig; planes: AdsbPlane[] }) {
   const { settings } = useSession();
   const tileUrl = settings?.mapTileUrl?.trim() || DEFAULT_TILES;
   const has = cfg.lat !== 0 || cfg.lon !== 0;
@@ -418,21 +448,10 @@ function AdsbMap({ cfg, planes, onPick }: { cfg: AdsbConfig; planes: AdsbPlane[]
   return (
     <MapContainer center={center} zoom={has ? 8 : 6} className="adsb-map" scrollWheelZoom={false}>
       <TileLayer url={tileUrl} attribution="&copy; OpenStreetMap" />
-      <ClickToPick onPick={onPick} />
       <Recenter lat={cfg.lat} lon={cfg.lon} has={has} />
       {has && (
         <>
-          <Marker
-            position={[cfg.lat, cfg.lon]}
-            icon={antennaIcon}
-            draggable
-            eventHandlers={{
-              dragend: (e) => {
-                const ll = (e.target as L.Marker).getLatLng();
-                onPick(round5(ll.lat), round5(ll.lng));
-              },
-            }}
-          />
+          <Marker position={[cfg.lat, cfg.lon]} icon={antennaIcon} />
           {cfg.maxRangeKm > 0 && (
             <Circle center={[cfg.lat, cfg.lon]} radius={cfg.maxRangeKm * 1000} pathOptions={{ color: '#3fb6a8', weight: 1, fillOpacity: 0.04, dashArray: '6 6' }} />
           )}
