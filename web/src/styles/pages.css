@@ -1395,3 +1395,59 @@
   flex-direction: column;
   gap: 4px;
 }
+
+/* ================= Serwery ================= */
+.server-switch {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: 0 var(--sp-3) var(--sp-2);
+  color: var(--text-2);
+}
+.server-switch .select {
+  flex: 1;
+  min-width: 0;
+}
+.sheet .server-switch {
+  margin: 0 0 var(--sp-3);
+}
+.server-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--sp-4);
+}
+.server-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+.server-card.active {
+  border-color: var(--accent);
+}
+.server-card-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+.server-ports {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--sp-2);
+  margin: 0;
+}
+.server-ports > div {
+  background: var(--surface-2);
+  border-radius: var(--r-sm, 6px);
+  padding: 6px var(--sp-3);
+}
+.server-ports dt {
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+}
+.server-ports dd {
+  margin: 0;
+  font-weight: 600;
+}
+.server-port-grid {
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}

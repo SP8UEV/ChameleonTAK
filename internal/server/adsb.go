@@ -115,8 +115,20 @@ func (b *adsbBridge) step(ctx context.Context) {
 	if len(cfg.ADSB.Groups) > 0 {
 		groups = cfg.ADSB.Groups
 	}
+	targets := []*App{b.app}
+	if len(cfg.ADSB.Servers) > 0 {
+		targets = targets[:0]
+		for _, id := range cfg.ADSB.Servers {
+			if s := b.app.serverByID(id); s != nil {
+				targets = append(targets, s)
+			}
+		}
+	}
 	for _, p := range planes {
-		b.app.router.Broadcast(p.CoT(adsbStale), groups)
+		raw := p.CoT(adsbStale)
+		for _, s := range targets {
+			s.router.Broadcast(raw, groups)
+		}
 	}
 	b.mu.Lock()
 	b.sentAt = time.Now()
@@ -239,6 +251,9 @@ func adsbView(c config.ADSB) config.ADSB {
 	if c.Groups == nil {
 		c.Groups = []string{}
 	}
+	if c.Servers == nil {
+		c.Servers = []string{}
+	}
 	return c
 }
 
@@ -285,6 +300,17 @@ func (a *App) hPutADSB(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	in.Groups = groups
+	servers := []string{}
+	for _, id := range in.Servers {
+		if a.serverByID(id) == nil {
+			fail(w, invalid("Nie ma serwera "+id+"."))
+			return
+		}
+		if !slices.Contains(servers, id) {
+			servers = append(servers, id)
+		}
+	}
+	in.Servers = servers
 	if in.ADSBX && in.ADSBXUUID == "" {
 		in.ADSBXUUID = newUUID()
 	}

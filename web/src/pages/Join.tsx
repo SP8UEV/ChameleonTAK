@@ -104,7 +104,7 @@ function stepsFor(p: PlatformKey): { steps: Step[]; install: string } {
  * Rejestracja kodem QR zeskanowanym w iTAK/TAKAware. Aplikacja łączy się wtedy z portem rejestracji,
  * więc telefon musi ufać certyfikatowi serwera: bez Let’s Encrypt najpierw instaluje się profil z CA.
  */
-function InAppQr({ option, publicCert, caName }: { option: JoinOption; publicCert: boolean; caName: string }) {
+function InAppQr({ option, publicCert, caName, server }: { option: JoinOption; publicCert: boolean; caName: string; server?: string }) {
   const app = platformLabel(option.platform);
   const scan =
     option.platform === 'itak' ? (
@@ -133,7 +133,7 @@ function InAppQr({ option, publicCert, caName }: { option: JoinOption; publicCer
                   <span className="join-step-num">1</span>
                 </span>
                 <span className="join-step-text stack-sm">
-                  <a className="btn btn-sm" href={api.caProfileUrl} style={{ alignSelf: 'flex-start' }}>
+                  <a className="btn btn-sm" href={api.caProfileUrl(server)} style={{ alignSelf: 'flex-start' }}>
                     <ShieldCheck size={16} /> Zainstaluj certyfikat serwera
                   </a>
                   <span>
@@ -343,7 +343,7 @@ function JoinValidView({ info }: { info: JoinValid }) {
 
           <div className="stack-sm">
             {option.nativeQr && (option.platform === 'itak' || option.platform === 'takaware') && (
-              <InAppQr option={option} publicCert={info.publicCert} caName={info.caName} />
+              <InAppQr option={option} publicCert={info.publicCert} caName={info.caName} server={info.server} />
             )}
             {option.nativeQr && option.platform !== 'itak' && option.platform !== 'takaware' && (
               <Disclosure title="Kod QR do zeskanowania w aplikacji" icon={<QrIcon size={18} />}>

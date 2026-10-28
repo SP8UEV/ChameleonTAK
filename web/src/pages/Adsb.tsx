@@ -273,6 +273,8 @@ function AdsbMap({ cfg, planes, onPick }: { cfg: AdsbConfig; planes: AdsbPlane[]
 function ConfigForm({ cfg, setCfg, saved, status }: { cfg: AdsbConfig; setCfg: (c: AdsbConfig) => void; saved: AdsbConfig; status: AdsbStatus }) {
   const toast = useToast();
   const groups = useApi(api.groups, []);
+  const servers = useApi(api.servers, []);
+  const serverList = servers.data?.servers ?? [];
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [steps, setSteps] = useState<{ step: string; ok: boolean; error: string }[]>([]);
@@ -350,6 +352,26 @@ function ConfigForm({ cfg, setCfg, saved, status }: { cfg: AdsbConfig; setCfg: (
               />
             </Field>
           </div>
+          {serverList.length > 1 && (
+            <Field label="Na których serwerach" hint="Bez wyboru samoloty trafiają tylko na serwer główny.">
+              <div className="chips" role="group">
+                {serverList.map((sv) => {
+                  const on = cfg.servers.includes(sv.id);
+                  return (
+                    <button
+                      key={sv.id}
+                      type="button"
+                      className={`chip${on ? ' selected' : ''}`}
+                      aria-pressed={on}
+                      onClick={() => set({ servers: on ? cfg.servers.filter((x) => x !== sv.id) : [...cfg.servers, sv.id] })}
+                    >
+                      {sv.displayName}
+                    </button>
+                  );
+                })}
+              </div>
+            </Field>
+          )}
           <Field
             label="Komu pokazywać"
             hint={cfg.groups.length === 0 && (groups.data?.length ?? 0) > 0 ? 'Bez wybranych grup samoloty widzą wszyscy.' : undefined}

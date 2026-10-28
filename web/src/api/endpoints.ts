@@ -1,4 +1,4 @@
-import { http } from './client';
+import { http, withServer } from './client';
 import type {
   AdsbConfig,
   AdsbInfo,
@@ -23,7 +23,10 @@ import type {
   NewDevice,
   Position,
   PublicAccess,
+  NewServer,
   PortCheck,
+  ServerInfo,
+  ServerList,
   PublicIP,
   SetupDefaults,
   SetupProgress,
@@ -67,6 +70,10 @@ export const api = {
   factoryReset: () => http.post<void>('/api/system/factory-reset', { confirm: 'RESET' }),
   backupUrl: '/api/system/backup',
 
+  servers: () => http.get<ServerList>('/api/servers'),
+  createServer: (req: NewServer) => http.post<ServerInfo>('/api/servers', req),
+  deleteServer: (id: string) => http.del<void>(`/api/servers/${enc(id)}`),
+
   // 4.3 Użytkownicy, urządzenia
   users: () => http.get<User[]>('/api/users'),
   user: (id: number) => http.get<User>(`/api/users/${id}`),
@@ -77,7 +84,7 @@ export const api = {
   addDevice: (userId: number, dev: NewDevice) => http.post<Device>(`/api/users/${userId}/devices`, dev),
   deleteDevice: (id: number) => http.del<void>(`/api/devices/${id}`),
   newToken: (id: number) => http.post<Device>(`/api/devices/${id}/token`),
-  devicePackageUrl: (id: number) => `/api/devices/${id}/package`,
+  devicePackageUrl: (id: number) => withServer(`/api/devices/${id}/package`),
 
   join: (token: string) => http.get<JoinInfo>(`/api/join/${enc(token)}`, { noAuthRedirect: true }),
 
@@ -103,7 +110,7 @@ export const api = {
   uploadFile: (file: File) => http.upload<FileEntry>('/api/files', file),
   setFilePublic: (hash: string, isPublic: boolean) => http.put<FileEntry>(`/api/files/${enc(hash)}`, { public: isPublic }),
   deleteFile: (hash: string) => http.del<void>(`/api/files/${enc(hash)}`),
-  fileDownloadUrl: (hash: string) => `/api/files/${enc(hash)}/download`,
+  fileDownloadUrl: (hash: string) => withServer(`/api/files/${enc(hash)}/download`),
 
   missions: () => http.get<Mission[]>('/api/missions'),
   mission: (name: string) => http.get<MissionDetail>(`/api/missions/${enc(name)}`),
@@ -119,7 +126,11 @@ export const api = {
 
   certs: () => http.get<Cert[]>('/api/certs'),
   revokeCert: (serial: string) => http.post<void>(`/api/certs/${enc(serial)}/revoke`),
-  caPemUrl: '/api/ca.pem',
-  caProfileUrl: '/api/ca.mobileconfig',
-  truststoreUrl: '/api/truststore.p12',
+  get caPemUrl() {
+    return withServer('/api/ca.pem');
+  },
+  caProfileUrl: (server?: string) => withServer('/api/ca.mobileconfig', server),
+  get truststoreUrl() {
+    return withServer('/api/truststore.p12');
+  },
 };

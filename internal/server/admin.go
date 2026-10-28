@@ -151,6 +151,9 @@ func (a *App) applyNetwork(mode, wifiSSID, wifiPass, hsSSID, hsPass string) erro
 
 // applyFirewall opens exactly the ports the server uses.
 func (a *App) applyFirewall() error {
+	if a.parent != nil {
+		return a.parent.applyFirewall()
+	}
 	if !a.helper.Available() {
 		return system.ErrUnsupported
 	}
@@ -166,6 +169,9 @@ func (a *App) applyFirewall() error {
 	}
 	if cfg.SSHEnabled {
 		ports = append(ports, 22)
+	}
+	for _, s := range a.servers()[1:] {
+		ports = append(ports, takPorts(s.cfg.Get().Ports)...)
 	}
 	var s []string
 	for _, p := range ports {
@@ -190,6 +196,8 @@ type settingsJSON struct {
 	Profile            config.Profile     `json:"profile"`
 	MapTileURL         string             `json:"mapTileUrl"`
 	Network            map[string]any     `json:"network"`
+	ServerID           string             `json:"serverId"`
+	Main               bool               `json:"main"`
 	DDNS               config.DDNS        `json:"ddns"`
 	PanelAccess        config.PanelAccess `json:"panelAccess"`
 }
@@ -205,7 +213,14 @@ func settingsView(c config.Config) settingsJSON {
 }
 
 func (a *App) hGetSettings(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, 200, settingsView(a.cfg.Get()))
+	writeJSON(w, 200, a.settingsOut(a.cfg.Get()))
+}
+
+// settingsOut is settingsView with the server it belongs to.
+func (a *App) settingsOut(c config.Config) settingsJSON {
+	v := settingsView(c)
+	v.ServerID, v.Main = a.ID(), a.parent == nil
+	return v
 }
 
 func validatePorts(p config.Ports) error {
@@ -273,11 +288,20 @@ func (a *App) hPutSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	cur.ServerName = strings.TrimSpace(cur.ServerName)
+	if a.parent != nil {
+		// The panel, its ports and Let's Encrypt belong to the main server.
+		cur.Ports.HTTP, cur.Ports.HTTPS, cur.ForceHTTPS, cur.LetsEncrypt = old.Ports.HTTP, old.Ports.HTTPS, old.ForceHTTPS, old.LetsEncrypt
+		cur.PanelAccess = old.PanelAccess
+	}
 	if err := validateServerName(cur.ServerName); err != nil {
 		fail(w, err)
 		return
 	}
 	if err := validatePorts(cur.Ports); err != nil {
+		fail(w, err)
+		return
+	}
+	if err := a.checkPortConflicts(cur.Ports, a); err != nil {
 		fail(w, err)
 		return
 	}
@@ -365,13 +389,18 @@ func (a *App) hPutSettings(w http.ResponseWriter, r *http.Request) {
 	if newCfg.DDNS != old.DDNS || newCfg.ServerName != old.ServerName {
 		a.ddns.wake()
 	}
-	writeJSON(w, 200, map[string]any{"settings": settingsView(newCfg), "restarted": restart, "certsRegenerated": regen})
+	writeJSON(w, 200, map[string]any{"settings": a.settingsOut(newCfg), "restarted": restart, "certsRegenerated": regen})
 	if restart {
 		go func() {
 			time.Sleep(500 * time.Millisecond)
 			a.startServices()
 			if newCfg.Ports.HTTP != old.Ports.HTTP && a.opts.HTTPAddr == "" {
 				a.restartHTTP()
+			}
+			if a.parent == nil && (newCfg.Ports.HTTP != old.Ports.HTTP || newCfg.Ports.HTTPS != old.Ports.HTTPS || newCfg.ForceHTTPS != old.ForceHTTPS) {
+				for _, s := range a.servers()[1:] {
+					s.syncPanelPorts()
+				}
 			}
 			if portsChanged {
 				if err := a.applyFirewall(); err != nil && err != system.ErrUnsupported {

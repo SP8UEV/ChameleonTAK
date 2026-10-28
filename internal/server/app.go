@@ -58,6 +58,14 @@ type App struct {
 	ddns    *ddnsUpdater
 	adsb    *adsbBridge
 	ports   portChecker
+	api     http.Handler // the panel API of this server
+
+	// Several servers on one device (multi.go): an additional server has a parent (the main
+	// server) and an id; the main server keeps the set of additional ones.
+	parent  *App
+	id      string
+	others  *serverSet
+	baseLog *slog.Logger
 
 	started time.Time
 	setup   *setupJob
@@ -96,8 +104,10 @@ func New(opts Options, log *slog.Logger) (*App, error) {
 		return nil, err
 	}
 	logs := newLogRing()
+	baseLog := log
 	log = slog.New(&ringHandler{inner: log.Handler(), ring: logs})
 	a := &App{
+		baseLog: baseLog,
 		logs:    logs,
 		opts:    opts,
 		log:     log,
@@ -115,6 +125,7 @@ func New(opts Options, log *slog.Logger) (*App, error) {
 	a.public = newPublicCerts(a)
 	a.ddns = newDDNS(a)
 	a.adsb = newADSB(a)
+	a.api = a.apiMux()
 	return a, nil
 }
 
@@ -122,6 +133,7 @@ func (a *App) Close() error { return a.store.Close() }
 
 // Run serves until ctx is cancelled.
 func (a *App) Run(ctx context.Context) error {
+	a.others = &serverSet{ctx: ctx}
 	if err := a.startHTTP(); err != nil {
 		return err
 	}
@@ -145,8 +157,15 @@ func (a *App) Run(ctx context.Context) error {
 	go a.public.run(ctx)
 	go a.ddns.run(ctx)
 	go a.adsb.run(ctx)
+	if cfg.SetupDone {
+		a.startOthers()
+		if err := a.applyFirewall(); err != nil && !errors.Is(err, system.ErrUnsupported) {
+			a.log.Warn("zapora", "err", err)
+		}
+	}
 
 	<-ctx.Done()
+	a.waitOthers()
 	a.stopServices()
 	a.router.CloseAll()
 	a.mu.Lock()
@@ -240,8 +259,10 @@ func (a *App) tlsConfig(auth tls.ClientAuthType, acme bool) *tls.Config {
 	protos := []string{"http/1.1"}
 	if acme {
 		protos = append(protos, acmeALPN)
+		// An additional server with the main server's address uses its Let's Encrypt certificate.
+		h := a.host()
 		getCert = func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
-			if m, host := a.acmeFor(); m != nil && strings.EqualFold(hello.ServerName, host) {
+			if m, host := h.acmeFor(); m != nil && strings.EqualFold(hello.ServerName, host) && a.publicCert() {
 				c, err := m.GetCertificate(hello)
 				if err == nil {
 					return c, nil
@@ -249,8 +270,8 @@ func (a *App) tlsConfig(auth tls.ClientAuthType, acme bool) *tls.Config {
 				a.log.Warn("Let's Encrypt", "err", err)
 			}
 			// Clients that dial an IP address send no server name (SNI).
-			if ip := a.publicIPHost(); ip != "" && (hello.ServerName == "" || hello.ServerName == ip) {
-				if c := a.public.forIP(ip); c != nil {
+			if ip := h.publicIPHost(); ip != "" && (hello.ServerName == "" || hello.ServerName == ip) && a.publicCert() {
+				if c := h.public.forIP(ip); c != nil {
 					return c, nil
 				}
 			}
@@ -317,12 +338,14 @@ func (a *App) startServices() {
 	stop, err = a.serveTLS(":"+strconv.Itoa(cfg.Ports.Enroll), marti, a.tlsConfig(tls.VerifyClientCertIfGiven, true))
 	add("Enrollment", cfg.Ports.Enroll, err, stop)
 
-	httpsPort := cfg.Ports.HTTPS
-	if _, p, perr := net.SplitHostPort(a.panelHTTPSAddr()); perr == nil {
-		httpsPort, _ = strconv.Atoi(p)
+	if a.parent == nil { // an additional server shares the main server's panel
+		httpsPort := cfg.Ports.HTTPS
+		if _, p, perr := net.SplitHostPort(a.panelHTTPSAddr()); perr == nil {
+			httpsPort, _ = strconv.Atoi(p)
+		}
+		stop, err = a.serveTLS(a.panelHTTPSAddr(), a.panelHandler(true), a.tlsConfig(tls.NoClientCert, true))
+		add("Panel HTTPS", httpsPort, err, stop)
 	}
-	stop, err = a.serveTLS(a.panelHTTPSAddr(), a.panelHandler(true), a.tlsConfig(tls.NoClientCert, true))
-	add("Panel HTTPS", httpsPort, err, stop)
 
 	a.mu.Lock()
 	a.closers, a.states = closers, states

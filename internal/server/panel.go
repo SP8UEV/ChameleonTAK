@@ -33,7 +33,7 @@ const userKey ctxKey = 1
 
 // panelHandler serves the SPA and /api on the panel ports.
 func (a *App) panelHandler(isTLS bool) http.Handler {
-	api := a.apiMux()
+	api := a.api
 	static := http.FileServerFS(panel.FS())
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		cfg := a.cfg.Get()
@@ -60,6 +60,13 @@ func (a *App) panelHandler(isTLS bool) http.Handler {
 		if strings.HasPrefix(r.URL.Path, "/api/") {
 			if !sameOriginWrite(r) {
 				httpError(w, http.StatusForbidden, "Żądanie z innej strony zostało zablokowane.")
+				return
+			}
+			if s, err := a.requestServer(r); err != nil {
+				fail(w, err)
+				return
+			} else if s != nil {
+				s.serveDelegated(w, r)
 				return
 			}
 			api.ServeHTTP(w, r)
@@ -192,6 +199,10 @@ func (a *App) apiMux() *http.ServeMux {
 	adm("PUT /api/adsb", a.hPutADSB)
 	adm("POST /api/adsb/install", a.hADSBInstall)
 
+	adm("GET /api/servers", a.hListServers)
+	adm("POST /api/servers", a.hCreateServer)
+	adm("DELETE /api/servers/{id}", a.hDeleteServer)
+
 	adm("GET /api/certs", a.hListCerts)
 	adm("GET /api/logs", a.hLogs)
 	adm("POST /api/certs/{serial}/revoke", a.hRevokeCert)
@@ -202,7 +213,11 @@ func (a *App) apiMux() *http.ServeMux {
 
 func (a *App) requireAdmin(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		u := a.sessionUser(r)
+		// An additional server trusts the session the main server checked (serveDelegated).
+		u, _ := r.Context().Value(delegateKey).(*store.User)
+		if u == nil && a.parent == nil {
+			u = a.sessionUser(r)
+		}
 		if u == nil {
 			httpError(w, http.StatusUnauthorized, "Zaloguj się.")
 			return

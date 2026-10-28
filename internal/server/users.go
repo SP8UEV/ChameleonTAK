@@ -665,7 +665,7 @@ func (a *App) hJoin(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	writeJSON(w, 200, map[string]any{
-		"valid": true, "expiresAt": t.ExpiresAt, "displayName": cfg.DisplayName, "serverName": cfg.ServerName,
+		"valid": true, "server": a.ID(), "expiresAt": t.ExpiresAt, "displayName": cfg.DisplayName, "serverName": cfg.ServerName,
 		"publicCert": a.publicCert(), "caName": a.caName(),
 		"user":    map[string]string{"username": u.Username, "callsign": u.Callsign},
 		"device":  map[string]any{"id": d.ID, "name": d.Name, "platform": d.Platform},

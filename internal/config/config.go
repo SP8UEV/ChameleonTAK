@@ -55,6 +55,7 @@ type ADSB struct {
 	MaxRangeKm int      `json:"maxRangeKm"` // 0 = no limit
 	MaxAltFt   int      `json:"maxAltFt"`   // 0 = no limit
 	Groups     []string `json:"groups"`     // empty = every client
+	Servers    []string `json:"servers"`    // servers that get the aircraft; empty = the main one
 	FR24       bool     `json:"fr24"`
 	FR24Key    string   `json:"fr24Key"`
 	ADSBX      bool     `json:"adsbx"`
@@ -185,6 +186,7 @@ func (m *Manager) Get() Config {
 	c.Platforms = append([]string(nil), m.cfg.Platforms...)
 	c.PanelAccess.Allow = append([]string(nil), m.cfg.PanelAccess.Allow...)
 	c.ADSB.Groups = append([]string(nil), m.cfg.ADSB.Groups...)
+	c.ADSB.Servers = append([]string(nil), m.cfg.ADSB.Servers...)
 	c.Profile.ExtraPrefs = make(map[string]string, len(m.cfg.Profile.ExtraPrefs))
 	for k, v := range m.cfg.Profile.ExtraPrefs {
 		c.Profile.ExtraPrefs[k] = v
@@ -200,6 +202,7 @@ func (m *Manager) Update(fn func(c *Config) error) (Config, error) {
 	c.Platforms = append([]string(nil), m.cfg.Platforms...)
 	c.PanelAccess.Allow = append([]string(nil), m.cfg.PanelAccess.Allow...)
 	c.ADSB.Groups = append([]string(nil), m.cfg.ADSB.Groups...)
+	c.ADSB.Servers = append([]string(nil), m.cfg.ADSB.Servers...)
 	extra := make(map[string]string, len(m.cfg.Profile.ExtraPrefs))
 	for k, v := range m.cfg.Profile.ExtraPrefs {
 		extra[k] = v

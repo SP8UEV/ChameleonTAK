@@ -68,6 +68,7 @@ export interface PublicAccess {
   cert: PublicCertStatus;
   httpPort: number;
   ddns: DdnsStatus;
+  main: boolean;
 }
 
 /** Dostawca dynamicznego DNS; '' = wyłączone. */
@@ -230,6 +231,9 @@ export interface Settings {
   mapTileUrl: string;
   ddns: DdnsConfig;
   panelAccess: PanelAccessConfig;
+  /** Serwer, którego dotyczą ustawienia; false = dodatkowy serwer (panel, sieć i system są wspólne). */
+  serverId: string;
+  main: boolean;
 }
 
 export interface SettingsUpdateResult {
@@ -332,6 +336,8 @@ export interface JoinValid {
   displayName: string;
   serverName: string;
   publicCert: boolean;
+  /** Serwer, do którego należy kod (kilka serwerów na jednym urządzeniu). */
+  server?: string;
   /** Nazwa urzędu certyfikacji (widoczna w ustawieniach zaufania iOS). */
   caName: string;
   user: { username: string; callsign: string };
@@ -487,6 +493,8 @@ export interface AdsbConfig {
   maxRangeKm: number;
   maxAltFt: number;
   groups: string[];
+  /** Serwery, które dostają samoloty; pusta lista = serwer główny. */
+  servers: string[];
   fr24: boolean;
   fr24Key: string;
   adsbx: boolean;
@@ -550,4 +558,30 @@ export interface AdsbInfo {
 export interface AdsbSaveResult {
   config: AdsbConfig;
   steps: { step: string; ok: boolean; error: string }[];
+}
+
+/* ---------- Kilka serwerów TAK na jednym urządzeniu ---------- */
+export interface ServerInfo {
+  id: string;
+  main: boolean;
+  displayName: string;
+  serverName: string;
+  ports: Ports;
+  platforms: PlatformKey[];
+  clients: number;
+  users: number;
+  listeners: Listener[] | null;
+}
+
+export interface ServerList {
+  servers: ServerInfo[];
+  suggestedPorts: Ports;
+}
+
+export interface NewServer {
+  id: string;
+  displayName: string;
+  serverName: string;
+  ports: Pick<Ports, 'cotTls' | 'marti' | 'enroll'>;
+  platforms: PlatformKey[];
 }

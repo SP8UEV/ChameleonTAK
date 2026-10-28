@@ -13,6 +13,7 @@ import {
   MonitorSmartphone,
   Moon,
   Plane,
+  Server,
   Settings as SettingsIcon,
   ShieldCheck,
   Sun,
@@ -24,7 +25,8 @@ import { BrandMark, Led, Loading } from '../components/ui';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { useTheme } from '../lib/theme';
 import { useLive, useWsStatus } from '../lib/ws';
-import { useStatus } from './session';
+import { useSession, useStatus } from './session';
+import { ServerSwitcher } from '../components/ServerSwitcher';
 
 interface NavDef {
   to: string;
@@ -47,6 +49,7 @@ const NAV_DATA: NavDef[] = [
   { to: '/adsb', label: 'ADS-B', icon: Plane },
 ];
 const NAV_SERVER: NavDef[] = [
+  { to: '/servers', label: 'Serwery', icon: Server },
   { to: '/certs', label: 'Certyfikaty', icon: ShieldCheck },
   { to: '/logs', label: 'Dziennik', icon: FileText },
   { to: '/settings', label: 'Ustawienia', icon: SettingsIcon },
@@ -102,6 +105,7 @@ function LiveIndicator() {
 
 export function Layout() {
   const { status } = useStatus();
+  const { settings } = useSession();
   const [theme, toggleTheme] = useTheme();
   const [sheetOpen, setSheetOpen] = useState(false);
   const navigate = useNavigate();
@@ -124,7 +128,9 @@ export function Layout() {
     navigate('/login', { replace: true });
   };
 
-  const brandSub = status.displayName && status.displayName !== 'ChameleonTAK' ? status.displayName : status.serverName;
+  // Nazwa wybranego serwera (przy kilku serwerach na urządzeniu panel pokazuje ten, którym zarządza).
+  const shownName = settings?.displayName ?? status.displayName;
+  const brandSub = shownName && shownName !== 'ChameleonTAK' ? shownName : (settings?.serverName ?? status.serverName);
   const themeLabel = theme === 'dark' ? 'Jasny motyw' : 'Ciemny motyw';
   const ThemeIcon = theme === 'dark' ? Sun : Moon;
   const moreActive = !TABS.some((t) => (t.end ? location.pathname === t.to : location.pathname.startsWith(t.to)));
@@ -139,6 +145,7 @@ export function Layout() {
             <span className="brand-sub">{brandSub}</span>
           </span>
         </NavLink>
+        <ServerSwitcher />
         <FullNav />
         <div className="sidebar-foot">
           <LiveIndicator />
@@ -203,6 +210,7 @@ export function Layout() {
           }}
         >
           <div className="sheet" role="dialog" aria-label="Menu">
+            <ServerSwitcher />
             <FullNav onNavigate={() => setSheetOpen(false)} />
             <div className="sheet-foot">
               <div className="grow" style={{ alignSelf: 'center' }}>

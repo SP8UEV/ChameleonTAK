@@ -9,6 +9,37 @@ export class ApiError extends Error {
   }
 }
 
+/* ---------- Wybrany serwer (kilka serwerów TAK na jednym urządzeniu) ---------- */
+const SERVER_KEY = 'ctak-server';
+export const MAIN_SERVER = 'main';
+let selectedServer = (() => {
+  try {
+    return localStorage.getItem(SERVER_KEY) || MAIN_SERVER;
+  } catch {
+    return MAIN_SERVER;
+  }
+})();
+
+/** Serwer, którego dotyczą zapytania panelu. */
+export function currentServer(): string {
+  return selectedServer;
+}
+
+export function setCurrentServer(id: string) {
+  selectedServer = id || MAIN_SERVER;
+  try {
+    localStorage.setItem(SERVER_KEY, selectedServer);
+  } catch {
+    /* tryb prywatny — wybór zostaje tylko do przeładowania */
+  }
+}
+
+/** Dopisuje wybór serwera do linku (pobieranie plików, WebSocket), gdzie nie da się wysłać nagłówka. */
+export function withServer(url: string, id: string = selectedServer): string {
+  if (!id || id === MAIN_SERVER) return url;
+  return `${url}${url.includes('?') ? '&' : '?'}server=${encodeURIComponent(id)}`;
+}
+
 type UnauthorizedHandler = () => void;
 let onUnauthorized: UnauthorizedHandler | null = null;
 
@@ -50,6 +81,7 @@ async function parseError(res: Response): Promise<string> {
 
 async function request<T>(method: string, path: string, body?: unknown, opts: RequestOptions = {}): Promise<T> {
   const headers: Record<string, string> = { Accept: 'application/json' };
+  if (selectedServer !== MAIN_SERVER) headers['X-CTAK-Server'] = selectedServer;
   let payload: BodyInit | undefined;
   if (body instanceof FormData) {
     payload = body;

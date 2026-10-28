@@ -403,6 +403,10 @@ func writePrivate(path string, data []byte) error {
 // publicCert reports whether phones get a publicly trusted certificate on the panel for the
 // configured server name right now.
 func (a *App) publicCert() bool {
+	if a.parent != nil {
+		// An additional server shares the main server's certificate when it has the same address.
+		return a.parent.publicCert() && strings.EqualFold(a.cfg.Get().ServerName, a.parent.cfg.Get().ServerName)
+	}
 	cfg := a.cfg.Get()
 	return cfg.LetsEncrypt.Enabled && accessMode(cfg) != "local" && a.public.ready(cfg.ServerName)
 }
@@ -423,7 +427,7 @@ func (a *App) hPublicAccess(w http.ResponseWriter, r *http.Request) {
 	cfg := a.cfg.Get()
 	writeJSON(w, 200, map[string]any{
 		"mode": accessMode(cfg), "host": cfg.ServerName, "letsEncrypt": cfg.LetsEncrypt.Enabled,
-		"cert": a.public.Status(), "httpPort": cfg.Ports.HTTP, "ddns": a.ddns.Status(),
+		"cert": a.host().public.Status(), "httpPort": cfg.Ports.HTTP, "ddns": a.ddns.Status(), "main": a.parent == nil,
 	})
 }
 

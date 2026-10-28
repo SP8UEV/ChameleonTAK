@@ -119,6 +119,14 @@ func (a *App) runPortCheck(ctx context.Context) *portCheckResult {
 	listening := system.ListeningTCP()
 
 	known := serverPorts(cfg, addrPort(a.panelHTTPAddr(), cfg.Ports.HTTP), addrPort(a.panelHTTPSAddr(), cfg.Ports.HTTPS))
+	// Every additional server needs its TAK ports the same way as the main one.
+	for _, s := range a.servers()[1:] {
+		sc := s.cfg.Get()
+		for _, k := range serverPorts(sc, 0, 0)[2:] {
+			k.name += " — " + sc.DisplayName
+			known = append(known, k)
+		}
+	}
 	ports := make([]portResult, 0, len(known)+len(listening))
 	for _, k := range known {
 		ports = append(ports, portResult{Port: k.port, External: k.ext, Name: k.name, Ours: true, Want: k.want})

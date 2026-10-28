@@ -1,4 +1,5 @@
 import { useEffect, useRef, useSyncExternalStore } from 'react';
+import { withServer } from '../api/client';
 import type { WsMessage } from '../api/types';
 
 // Jedno współdzielone połączenie WebSocket z /api/ws.
@@ -23,7 +24,7 @@ function setStatus(s: WsStatus) {
 
 function wsUrl() {
   const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  return `${proto}//${window.location.host}/api/ws`;
+  return `${proto}//${window.location.host}${withServer('/api/ws')}`;
 }
 
 function connect() {

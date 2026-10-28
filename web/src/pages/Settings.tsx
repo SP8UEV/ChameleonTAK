@@ -30,6 +30,9 @@ const SECTIONS = [
   { id: 'system', label: 'System' },
 ];
 
+/** Sekcje wspólne dla urządzenia — widoczne tylko przy serwerze głównym. */
+const HOST_SECTIONS = ['test-portow', 'bezpieczenstwo', 'siec', 'system'];
+
 type SaveFn = (patch: Partial<Settings>) => Promise<boolean>;
 
 export default function SettingsPage() {
@@ -61,7 +64,7 @@ export default function SettingsPage() {
     <>
       <PageHeader title="Ustawienia" />
       <nav className="chips settings-nav" aria-label="Sekcje ustawień">
-        {SECTIONS.map((s) => (
+        {SECTIONS.filter((s) => state.data?.main !== false || !HOST_SECTIONS.includes(s.id)).map((s) => (
           <a key={s.id} href={`#${s.id}`} className="chip">
             {s.label}
           </a>
@@ -70,15 +73,21 @@ export default function SettingsPage() {
       <AsyncView state={state}>
         {(s) => (
           <div className="stack-lg settings">
+            {!s.main && (
+              <Notice>
+                To ustawienia serwera <strong>{s.displayName}</strong>. Panel, sieć, system, bezpieczeństwo panelu i test portów są
+                wspólne dla wszystkich serwerów — znajdziesz je po przełączeniu na serwer główny.
+              </Notice>
+            )}
             <ServerSection s={s} save={save} />
-            <PortTestSection />
-            <SecuritySection s={s} save={save} />
+            {s.main && <PortTestSection />}
+            {s.main && <SecuritySection s={s} save={save} />}
             <PortsSection s={s} save={save} />
             <PlatformsSection s={s} save={save} />
             <ProfileSection s={s} save={save} />
             <CertsSection s={s} save={save} />
-            <NetworkSection />
-            <SystemSection />
+            {s.main && <NetworkSection />}
+            {s.main && <SystemSection />}
           </div>
         )}
       </AsyncView>
@@ -282,15 +291,20 @@ function ServerSection({ s, save }: { s: Settings; save: SaveFn }) {
       {internet && (
         <>
           <PortForwarding mode={access} ports={s.ports} lanAddress={lanAddress} />
-          <CheckRow
+          {!s.main && (
+            <Notice>
+              Certyfikat Let’s Encrypt należy do serwera głównego. Ten serwer korzysta z niego, gdy ma ten sam adres.
+            </Notice>
+          )}
+          {s.main && <CheckRow
             checked={leEnabled}
             onChange={setLeEnabled}
             label="Certyfikat Let’s Encrypt (zalecane)"
             hint={`Telefony zaufają serwerowi bez ostrzeżeń, a iTAK i TAKAware zarejestrują się kodem QR prosto z aplikacji.${
               access === 'ip' ? ' Certyfikat dla adresu IP jest ważny 6 dni i odnawia się sam.' : ''
             }`}
-          />
-          {leEnabled && (
+          />}
+          {s.main && leEnabled && (
             <Field label="E-mail dla Let’s Encrypt (opcjonalnie)" htmlFor="st-le">
               <input id="st-le" className="input" type="email" value={leEmail} onChange={(e) => setLeEmail(e.target.value)} />
             </Field>
@@ -390,7 +404,7 @@ function PortsSection({ s, save }: { s: Settings; save: SaveFn }) {
     >
       {error && <Notice kind="danger">{error}</Notice>}
       <div className="form-grid-ports">
-        {PORT_FIELDS.map((p) => (
+        {PORT_FIELDS.filter((p) => s.main || (p.key !== 'http' && p.key !== 'https')).map((p) => (
           <Field key={p.key} label={p.label} htmlFor={`sp-${p.key}`}>
             <input
               id={`sp-${p.key}`}
@@ -412,12 +426,14 @@ function PortsSection({ s, save }: { s: Settings; save: SaveFn }) {
         label="Strumień bez szyfrowania (TCP)"
         hint="Niezalecane. Każdy w sieci może się połączyć bez certyfikatu i trafia do grupy ogólnej."
       />
-      <CheckRow
-        checked={forceHttps}
-        onChange={setForceHttps}
-        label="Przekierowuj panel na HTTPS"
-        hint="Przeglądarka może ostrzegać o certyfikacie, jeśli nie używasz Let’s Encrypt."
-      />
+      {s.main && (
+        <CheckRow
+          checked={forceHttps}
+          onChange={setForceHttps}
+          label="Przekierowuj panel na HTTPS"
+          hint="Przeglądarka może ostrzegać o certyfikacie, jeśli nie używasz Let’s Encrypt."
+        />
+      )}
     </Section>
   );
 }
