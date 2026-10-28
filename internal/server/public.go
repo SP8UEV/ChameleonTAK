@@ -423,7 +423,7 @@ func (a *App) hPublicAccess(w http.ResponseWriter, r *http.Request) {
 	cfg := a.cfg.Get()
 	writeJSON(w, 200, map[string]any{
 		"mode": accessMode(cfg), "host": cfg.ServerName, "letsEncrypt": cfg.LetsEncrypt.Enabled,
-		"cert": a.public.Status(), "httpPort": cfg.Ports.HTTP,
+		"cert": a.public.Status(), "httpPort": cfg.Ports.HTTP, "ddns": a.ddns.Status(),
 	})
 }
 

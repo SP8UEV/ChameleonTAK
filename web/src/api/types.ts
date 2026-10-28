@@ -67,6 +67,52 @@ export interface PublicAccess {
   letsEncrypt: boolean;
   cert: PublicCertStatus;
   httpPort: number;
+  ddns: DdnsStatus;
+}
+
+/** Dostawca dynamicznego DNS; '' = wyłączone. */
+export type DdnsProvider = '' | 'duckdns' | 'cloudflare' | 'url';
+
+export interface DdnsConfig {
+  provider: DdnsProvider;
+  token: string;
+  url: string;
+}
+
+export interface DdnsStatus {
+  state: 'off' | 'pending' | 'ok' | 'error';
+  provider: DdnsProvider;
+  domain: string;
+  publicIp: string;
+  dnsAddrs: string[] | null;
+  lastUpdate: string | null;
+  checked: string | null;
+  message: string;
+}
+
+export interface PortResult {
+  port: number;
+  external: number;
+  name: string;
+  ours: boolean;
+  listening: boolean;
+  firewall: 'open' | 'blocked' | 'unknown';
+  internet: 'open' | 'closed' | 'unknown';
+  want: 'open' | 'closed' | 'any';
+  level: 'ok' | 'info' | 'warn' | 'error';
+  suggestion: string;
+}
+
+export interface PortCheck {
+  mode: AccessMode;
+  publicIp: string;
+  lanIp: string;
+  firewall: 'managed' | 'disabled' | 'unknown';
+  externalError: string;
+  dns: { host: string; addrs: string[] | null; matches: boolean } | null;
+  ports: PortResult[];
+  hints: string[] | null;
+  checked: string;
 }
 
 export interface PublicIP {
@@ -171,6 +217,7 @@ export interface Settings {
   letsEncrypt: LetsEncrypt;
   profile: DeviceProfile;
   mapTileUrl: string;
+  ddns: DdnsConfig;
 }
 
 export interface SettingsUpdateResult {

@@ -2,8 +2,10 @@ import { useRef, useState, type ReactNode } from 'react';
 import { Archive, Download, LoaderCircle, Network, Power, RotateCcw, Save, TriangleAlert, Upload, Wifi } from 'lucide-react';
 import { api } from '../api/endpoints';
 import { errorMessage } from '../api/client';
-import type { AccessMode, NetworkMode, PlatformKey, Ports, Settings } from '../api/types';
+import type { AccessMode, DdnsConfig, NetworkMode, PlatformKey, Ports, Settings } from '../api/types';
 import { AccessChoice, CertStatusView, DetectIpButton, PortForwarding } from '../components/PublicAccess';
+import { DdnsFields, DdnsStatusView } from '../components/Ddns';
+import { PortTest } from '../components/PortTest';
 import { accessModeOf, isPublicIp, looksPublicDomain, validEmail } from '../lib/access';
 import { useSession } from '../app/session';
 import { useConfirm } from '../components/Confirm';
@@ -17,6 +19,7 @@ const DEFAULT_TILES = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 
 const SECTIONS = [
   { id: 'serwer', label: 'Serwer i dostęp' },
+  { id: 'test-portow', label: 'Test portów' },
   { id: 'porty', label: 'Porty' },
   { id: 'aplikacje', label: 'Aplikacje' },
   { id: 'profil', label: 'Profil urządzeń' },
@@ -66,6 +69,7 @@ export default function SettingsPage() {
         {(s) => (
           <div className="stack-lg settings">
             <ServerSection s={s} save={save} />
+            <PortTestSection />
             <PortsSection s={s} save={save} />
             <PlatformsSection s={s} save={save} />
             <ProfileSection s={s} save={save} />
@@ -157,6 +161,7 @@ function ServerSection({ s, save }: { s: Settings; save: SaveFn }) {
   const [leEmail, setLeEmail] = useState(s.letsEncrypt.email);
   const [displayName, setDisplayName] = useState(s.displayName);
   const [organization, setOrganization] = useState(s.organization);
+  const [ddns, setDdns] = useState<DdnsConfig>({ ...s.ddns });
   const [error, setError] = useState<string | null>(null);
   const status = useApi(api.publicAccess, [s.serverName, s.letsEncrypt.enabled], 15000);
   const sys = useApi(api.system, []);
@@ -166,8 +171,13 @@ function ServerSection({ s, save }: { s: Settings; save: SaveFn }) {
   const internet = access !== 'local';
   const le = { enabled: internet && leEnabled, email: internet && leEnabled ? leEmail.trim() : s.letsEncrypt.email };
   const nameChanged = serverName !== s.serverName;
+  // Dynamiczny DNS ma sens tylko z domeną; w innych trybach wyłączamy go przy zapisie.
+  const ddnsOut: DdnsConfig = access === 'domain' ? ddns : { ...ddns, provider: '' };
+  const ddnsChanged =
+    ddnsOut.provider !== s.ddns.provider || ddnsOut.token !== s.ddns.token || ddnsOut.url !== s.ddns.url;
   const dirty =
     nameChanged ||
+    ddnsChanged ||
     le.enabled !== s.letsEncrypt.enabled ||
     le.email !== s.letsEncrypt.email ||
     displayName !== s.displayName ||
@@ -179,6 +189,12 @@ function ServerSection({ s, save }: { s: Settings; save: SaveFn }) {
     if (access === 'domain' && !looksPublicDomain(serverName)) return setError('Podaj publiczną nazwę domenową, np. tak.twojafirma.pl.');
     if (access === 'ip' && !isPublicIp(serverName)) return setError('Podaj publiczny adres IP routera (nie adres z sieci lokalnej ani 100.64.x.x).');
     if (le.enabled && le.email && !validEmail(le.email)) return setError('Niepoprawny adres e-mail dla Let’s Encrypt.');
+    if (ddnsOut.provider === 'duckdns' && !/\.duckdns\.org$/i.test(serverName))
+      return setError('Dla DuckDNS domena musi kończyć się na .duckdns.org.');
+    if ((ddnsOut.provider === 'duckdns' || ddnsOut.provider === 'cloudflare') && !ddnsOut.token)
+      return setError('Podaj token dostawcy dynamicznego DNS.');
+    if (ddnsOut.provider === 'url' && !/^https?:\/\/\S+$/.test(ddnsOut.url))
+      return setError('Adres aktualizacji DNS musi zaczynać się od https://.');
     setError(null);
     if (nameChanged) {
       const ok = await confirm({
@@ -193,7 +209,9 @@ function ServerSection({ s, save }: { s: Settings; save: SaveFn }) {
       });
       if (!ok) return;
     }
-    if (await run({ serverName, letsEncrypt: le, displayName: displayName.trim(), organization: organization.trim() })) {
+    if (
+      await run({ serverName, letsEncrypt: le, displayName: displayName.trim(), organization: organization.trim(), ddns: ddnsOut })
+    ) {
       void status.reload();
     }
   };
@@ -277,6 +295,14 @@ function ServerSection({ s, save }: { s: Settings; save: SaveFn }) {
           {!nameChanged && status.data && <CertStatusView status={status.data.cert} />}
         </>
       )}
+      {access === 'domain' && (
+        <>
+          <DdnsFields value={ddns} onChange={setDdns} domain={serverName} />
+          {!nameChanged && !ddnsChanged && status.data && (
+            <DdnsStatusView status={status.data.ddns} onChange={(d) => status.setData({ ...status.data!, ddns: d })} />
+          )}
+        </>
+      )}
       {nameChanged && (
         <Notice kind="warn">
           Zmiana adresu wygeneruje nowy certyfikat serwera. Urządzenia skonfigurowane na stary adres mogą wymagać nowych kodów
@@ -291,6 +317,19 @@ function ServerSection({ s, save }: { s: Settings; save: SaveFn }) {
           <input id="st-org" className="input" value={organization} onChange={(e) => setOrganization(e.target.value)} />
         </Field>
       </div>
+    </Section>
+  );
+}
+
+/* ---------- Test portów ---------- */
+function PortTestSection() {
+  return (
+    <Section
+      id="test-portow"
+      title="Test portów"
+      description="Sprawdza, które porty działają, które przepuszcza zapora i które widać z internetu — i podpowiada, co otworzyć, a co zamknąć."
+    >
+      <PortTest />
     </Section>
   );
 }

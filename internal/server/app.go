@@ -55,6 +55,8 @@ type App struct {
 	limiter *limiter
 	logs    *logRing
 	public  *publicCerts
+	ddns    *ddnsUpdater
+	ports   portChecker
 
 	started time.Time
 	setup   *setupJob
@@ -110,6 +112,7 @@ func New(opts Options, log *slog.Logger) (*App, error) {
 	a.pos = NewPositions(st, a.hub)
 	a.router = stream.NewRouter(log, a)
 	a.public = newPublicCerts(a)
+	a.ddns = newDDNS(a)
 	return a, nil
 }
 
@@ -138,6 +141,7 @@ func (a *App) Run(ctx context.Context) error {
 	go a.pos.Run(ctx)
 	go a.maintenance(ctx)
 	go a.public.run(ctx)
+	go a.ddns.run(ctx)
 
 	<-ctx.Done()
 	a.stopServices()

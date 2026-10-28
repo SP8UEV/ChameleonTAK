@@ -138,6 +138,8 @@ func (a *App) apiMux() *http.ServeMux {
 	adm("GET /api/system", a.hSystem)
 	adm("GET /api/system/public-access", a.hPublicAccess)
 	adm("GET /api/system/public-ip", a.hDetectPublicIP)
+	adm("POST /api/system/ddns/update", a.hDDNSUpdate)
+	adm("GET /api/system/port-check", a.hPortCheck)
 	adm("POST /api/system/reboot", a.hReboot)
 	adm("POST /api/system/network", a.hNetwork)
 	adm("GET /api/system/backup", a.hBackup)

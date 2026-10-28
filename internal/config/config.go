@@ -31,6 +31,13 @@ type Profile struct {
 	ExtraPrefs   map[string]string `json:"extraPrefs"`
 }
 
+// DDNS keeps the domain's DNS record pointing at the router's public address.
+type DDNS struct {
+	Provider string `json:"provider"` // "" (off) | duckdns | cloudflare | url
+	Token    string `json:"token"`    // DuckDNS token or Cloudflare API token
+	URL      string `json:"url"`      // update URL of any other provider; {ip} and {domain} are substituted
+}
+
 type Network struct {
 	Mode            string `json:"mode"` // lan | hotspot
 	StaticIP        bool   `json:"staticIp"`
@@ -57,6 +64,7 @@ type Config struct {
 	SSHEnabled         bool        `json:"sshEnabled"`
 	ProfileUpdatedAt   time.Time   `json:"profileUpdatedAt"` // last change of the device profile settings
 	Network            Network     `json:"network"`
+	DDNS               DDNS        `json:"ddns"`
 }
 
 func DefaultPorts() Ports {

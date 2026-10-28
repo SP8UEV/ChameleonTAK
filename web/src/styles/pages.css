@@ -1229,3 +1229,57 @@
   flex: none;
   margin-top: 3px;
 }
+
+/* ---------- Test portów ---------- */
+.port-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+}
+.port-row {
+  display: flex;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+}
+.port-row + .port-row {
+  border-top: 1px solid var(--line);
+}
+.port-icon {
+  flex: none;
+  margin-top: 1px;
+  color: var(--text-3);
+}
+.port-ok .port-icon {
+  color: var(--ok);
+}
+.port-info .port-icon {
+  color: var(--info);
+}
+.port-warn .port-icon {
+  color: var(--warn);
+}
+.port-error .port-icon {
+  color: var(--danger);
+}
+.port-main {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.port-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px var(--sp-3);
+  align-items: baseline;
+}
+.port-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}

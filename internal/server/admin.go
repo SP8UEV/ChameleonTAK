@@ -190,6 +190,7 @@ type settingsJSON struct {
 	Profile            config.Profile     `json:"profile"`
 	MapTileURL         string             `json:"mapTileUrl"`
 	Network            map[string]any     `json:"network"`
+	DDNS               config.DDNS        `json:"ddns"`
 }
 
 func settingsView(c config.Config) settingsJSON {
@@ -197,8 +198,8 @@ func settingsView(c config.Config) settingsJSON {
 		ServerName: c.ServerName, DisplayName: c.DisplayName, Organization: c.Organization, Ports: c.Ports,
 		Platforms: c.Platforms, CertValidityDays: c.CertValidityDays, TokenValidityHours: c.TokenValidityHours,
 		CertPassword: c.CertPassword, ForceHTTPS: c.ForceHTTPS, LetsEncrypt: c.LetsEncrypt, Profile: c.Profile,
-		MapTileURL: c.MapTileURL,
-		Network:    map[string]any{"mode": c.Network.Mode, "staticIp": c.Network.StaticIP, "wifiSsid": c.Network.WifiSSID, "hotspotSsid": c.Network.HotspotSSID},
+		MapTileURL: c.MapTileURL, DDNS: c.DDNS,
+		Network: map[string]any{"mode": c.Network.Mode, "staticIp": c.Network.StaticIP, "wifiSsid": c.Network.WifiSSID, "hotspotSsid": c.Network.HotspotSSID},
 	}
 }
 
@@ -305,6 +306,11 @@ func (a *App) hPutSettings(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
+	cur.DDNS.Provider, cur.DDNS.Token, cur.DDNS.URL = strings.TrimSpace(cur.DDNS.Provider), strings.TrimSpace(cur.DDNS.Token), strings.TrimSpace(cur.DDNS.URL)
+	if err := validateDDNS(cur.ServerName, cur.DDNS); err != nil {
+		fail(w, err)
+		return
+	}
 	newCfg, err := a.cfg.Update(func(c *config.Config) error {
 		c.ServerName, c.DisplayName, c.Organization = cur.ServerName, strings.TrimSpace(cur.DisplayName), strings.TrimSpace(cur.Organization)
 		c.Ports, c.Platforms = cur.Ports, cur.Platforms
@@ -313,6 +319,7 @@ func (a *App) hPutSettings(w http.ResponseWriter, r *http.Request) {
 			c.ProfileUpdatedAt = time.Now().UTC()
 		}
 		c.ForceHTTPS, c.LetsEncrypt, c.Profile, c.MapTileURL = cur.ForceHTTPS, cur.LetsEncrypt, cur.Profile, strings.TrimSpace(cur.MapTileURL)
+		c.DDNS = cur.DDNS
 		if c.DisplayName == "" {
 			c.DisplayName = "ChameleonTAK"
 		}
@@ -336,6 +343,9 @@ func (a *App) hPutSettings(w http.ResponseWriter, r *http.Request) {
 	restart := newCfg.SetupDone && (portsChanged || newCfg.LetsEncrypt != old.LetsEncrypt || newCfg.ServerName != old.ServerName)
 	if newCfg.LetsEncrypt != old.LetsEncrypt || newCfg.ServerName != old.ServerName {
 		a.public.wake()
+	}
+	if newCfg.DDNS != old.DDNS || newCfg.ServerName != old.ServerName {
+		a.ddns.wake()
 	}
 	writeJSON(w, 200, map[string]any{"settings": settingsView(newCfg), "restarted": restart, "certsRegenerated": regen})
 	if restart {
