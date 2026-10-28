@@ -6,6 +6,7 @@ import type { AccessMode, DdnsConfig, NetworkMode, PlatformKey, Ports, Settings 
 import { AccessChoice, CertStatusView, DetectIpButton, PortForwarding } from '../components/PublicAccess';
 import { DdnsFields, DdnsStatusView } from '../components/Ddns';
 import { PortTest } from '../components/PortTest';
+import { NetworkTest } from '../components/NetworkTest';
 import { ZeroTierPanel } from '../components/ZeroTier';
 import { AccessListForm, PasswordForm } from '../components/PanelSecurity';
 import { accessModeOf, isPublicIp, looksPublicDomain, validEmail } from '../lib/access';
@@ -22,6 +23,7 @@ const DEFAULT_TILES = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 const SECTIONS = [
   { id: 'serwer', label: 'Serwer i dostęp' },
   { id: 'test-portow', label: 'Test portów' },
+  { id: 'test-sieci', label: 'Test sieci' },
   { id: 'bezpieczenstwo', label: 'Bezpieczeństwo panelu' },
   { id: 'porty', label: 'Porty' },
   { id: 'aplikacje', label: 'Aplikacje' },
@@ -32,7 +34,7 @@ const SECTIONS = [
 ];
 
 /** Sekcje wspólne dla urządzenia — widoczne tylko przy serwerze głównym. */
-const HOST_SECTIONS = ['test-portow', 'bezpieczenstwo', 'siec', 'system'];
+const HOST_SECTIONS = ['test-portow', 'test-sieci', 'bezpieczenstwo', 'siec', 'system'];
 
 type SaveFn = (patch: Partial<Settings>) => Promise<boolean>;
 
@@ -82,6 +84,15 @@ export default function SettingsPage() {
             )}
             <ServerSection s={s} save={save} />
             {s.main && <PortTestSection />}
+            {s.main && (
+              <Section
+                id="test-sieci"
+                title="Test sieci"
+                description="Prędkość i opóźnienie łącza internetowego Raspberry Pi oraz sieci lokalnej — i ilu użytkowników oraz widzów wideo serwer obsłuży."
+              >
+                <NetworkTest />
+              </Section>
+            )}
             {s.main && <SecuritySection s={s} save={save} />}
             <PortsSection s={s} save={save} />
             <PlatformsSection s={s} save={save} />

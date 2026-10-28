@@ -609,3 +609,22 @@ export interface NewServer {
   ports: Pick<Ports, 'cotTls' | 'marti' | 'enroll'>;
   platforms: PlatformKey[];
 }
+
+/* ---------- Test sieci ---------- */
+export interface InternetSpeed {
+  pingMs: number;
+  jitterMs: number;
+  downMbps: number;
+  upMbps: number;
+  error: string;
+  checked: string;
+}
+
+export interface ServerLoad {
+  clients: number;
+  planes: number;
+  cpus: number;
+  load1: number;
+  memTotal: number;
+  memAvail: number;
+}

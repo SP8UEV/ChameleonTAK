@@ -1480,3 +1480,70 @@
   gap: 6px;
   min-width: 190px;
 }
+
+/* ---------- Test sieci ---------- */
+.net-test-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--sp-3);
+}
+.net-test-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+.net-test-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  color: var(--accent);
+}
+.net-test-head .strong {
+  color: var(--text);
+}
+.net-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--sp-2);
+  margin: 0;
+}
+.net-metrics > div {
+  background: var(--surface-2);
+  border-radius: 6px;
+  padding: 6px var(--sp-3);
+}
+.net-metrics dt {
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+}
+.net-metrics dd {
+  margin: 0;
+  font-weight: 700;
+  font-size: var(--fs-lg, 1.1rem);
+}
+.net-metrics .net-ok dd {
+  color: var(--ok);
+}
+.net-metrics .net-warn dd {
+  color: var(--warn);
+}
+.net-metrics .net-danger dd {
+  color: var(--danger);
+}
+.net-verdict {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 6px var(--sp-3);
+  border-radius: 6px;
+  font-size: var(--fs-sm);
+}
+.net-verdict.net-ok {
+  background: var(--ok-soft);
+}
+.net-verdict.net-warn {
+  background: var(--warn-soft);
+}
+.net-verdict.net-danger {
+  background: var(--danger-soft);
+}
