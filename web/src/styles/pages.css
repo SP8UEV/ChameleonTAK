@@ -1301,3 +1301,97 @@
 .access-list li + li {
   border-top: 1px solid var(--line);
 }
+
+/* ================= ADS-B ================= */
+.adsb-status-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--sp-3);
+}
+.adsb-status {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.adsb-status-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.adsb-status-icon {
+  display: inline-flex;
+  color: var(--accent);
+}
+.adsb-map-card {
+  padding: 0;
+  overflow: hidden;
+}
+.adsb-map {
+  /* Własny kontekst warstw: kontrolki Leafleta (z-index 1000) nie wchodzą na górny pasek. */
+  isolation: isolate;
+  z-index: 0;
+  height: min(60vh, 520px);
+  min-height: 320px;
+  width: 100%;
+  background: var(--surface-2);
+}
+.adsb-map-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px var(--sp-4);
+  align-items: center;
+  padding: var(--sp-3) var(--sp-4);
+  border-top: 1px solid var(--line);
+}
+.adsb-map-foot > * {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.adsb-map-foot a {
+  margin-left: auto;
+}
+.adsb-antenna-dot {
+  display: block;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #3fb6a8;
+  border: 3px solid #fff;
+  box-shadow: 0 0 0 2px #3fb6a8, 0 1px 4px rgb(0 0 0 / 0.4);
+}
+.adsb-plane svg {
+  display: block;
+  fill: #f2b84b;
+  stroke: #1d1d1d;
+  stroke-width: 0.8;
+  filter: drop-shadow(0 1px 1px rgb(0 0 0 / 0.5));
+}
+.adsb-mil svg {
+  fill: #d96b6b;
+}
+.adsb-gnd svg {
+  fill: #9aa3ad;
+}
+.adsb-plane-label {
+  position: absolute;
+  left: 24px;
+  top: 2px;
+  white-space: nowrap;
+  font: 600 11px/1.3 var(--font-code);
+  color: #111;
+  background: rgb(255 255 255 / 0.85);
+  padding: 0 4px;
+  border-radius: 3px;
+}
+.adsb-coords {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+.adsb-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}

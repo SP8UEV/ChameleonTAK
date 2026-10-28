@@ -1,5 +1,8 @@
 import { http } from './client';
 import type {
+  AdsbConfig,
+  AdsbInfo,
+  AdsbSaveResult,
   LogEntry,
   BulkUsersRequest,
   Cert,
@@ -109,6 +112,10 @@ export const api = {
   deleteMission: (name: string) => http.del<void>(`/api/missions/${enc(name)}`),
   addMissionFile: (name: string, hash: string) => http.post<void>(`/api/missions/${enc(name)}/files`, { hash }),
   removeMissionFile: (name: string, hash: string) => http.del<void>(`/api/missions/${enc(name)}/files/${enc(hash)}`),
+
+  adsb: () => http.get<AdsbInfo>('/api/adsb'),
+  saveAdsb: (cfg: AdsbConfig) => http.put<AdsbSaveResult>('/api/adsb', cfg),
+  adsbInstall: (component: 'readsb' | 'fr24') => http.post<{ started: boolean }>('/api/adsb/install', { component }),
 
   certs: () => http.get<Cert[]>('/api/certs'),
   revokeCert: (serial: string) => http.post<void>(`/api/certs/${enc(serial)}/revoke`),

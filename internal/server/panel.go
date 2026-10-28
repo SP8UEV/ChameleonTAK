@@ -188,6 +188,10 @@ func (a *App) apiMux() *http.ServeMux {
 	adm("POST /api/missions/{name}/files", a.hMissionAddFile)
 	adm("DELETE /api/missions/{name}/files/{hash}", a.hMissionRemoveFile)
 
+	adm("GET /api/adsb", a.hADSB)
+	adm("PUT /api/adsb", a.hPutADSB)
+	adm("POST /api/adsb/install", a.hADSBInstall)
+
 	adm("GET /api/certs", a.hListCerts)
 	adm("GET /api/logs", a.hLogs)
 	adm("POST /api/certs/{serial}/revoke", a.hRevokeCert)

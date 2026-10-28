@@ -56,6 +56,7 @@ type App struct {
 	logs    *logRing
 	public  *publicCerts
 	ddns    *ddnsUpdater
+	adsb    *adsbBridge
 	ports   portChecker
 
 	started time.Time
@@ -113,6 +114,7 @@ func New(opts Options, log *slog.Logger) (*App, error) {
 	a.router = stream.NewRouter(log, a)
 	a.public = newPublicCerts(a)
 	a.ddns = newDDNS(a)
+	a.adsb = newADSB(a)
 	return a, nil
 }
 
@@ -142,6 +144,7 @@ func (a *App) Run(ctx context.Context) error {
 	go a.maintenance(ctx)
 	go a.public.run(ctx)
 	go a.ddns.run(ctx)
+	go a.adsb.run(ctx)
 
 	<-ctx.Done()
 	a.stopServices()

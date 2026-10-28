@@ -65,6 +65,10 @@ func RunSys(args []string, stdin io.Reader) error {
 		return strings.TrimRight(string(b), "\r\n"), err
 	}
 
+	if strings.HasPrefix(action, "adsb-") {
+		return runADSB(action, rest, secret)
+	}
+
 	switch action {
 	case "set-time":
 		if err := need(1); err != nil {

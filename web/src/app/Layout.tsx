@@ -12,6 +12,7 @@ import {
   MessagesSquare,
   MonitorSmartphone,
   Moon,
+  Plane,
   Settings as SettingsIcon,
   ShieldCheck,
   Sun,
@@ -43,6 +44,7 @@ const NAV_MAIN: NavDef[] = [
 const NAV_DATA: NavDef[] = [
   { to: '/files', label: 'Pliki', icon: Files },
   { to: '/missions', label: 'Misje', icon: Flag },
+  { to: '/adsb', label: 'ADS-B', icon: Plane },
 ];
 const NAV_SERVER: NavDef[] = [
   { to: '/certs', label: 'Certyfikaty', icon: ShieldCheck },

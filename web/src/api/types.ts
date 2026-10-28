@@ -476,3 +476,78 @@ export interface LogEntry {
   message: string;
   attrs: Record<string, string>;
 }
+
+/* ---------- ADS-B ---------- */
+export interface AdsbConfig {
+  bridge: boolean;
+  source: string;
+  lat: number;
+  lon: number;
+  altM: number;
+  maxRangeKm: number;
+  maxAltFt: number;
+  groups: string[];
+  fr24: boolean;
+  fr24Key: string;
+  adsbx: boolean;
+  adsbxUuid: string;
+}
+
+export interface AdsbComponent {
+  installed: boolean;
+  active: boolean;
+  detail: string;
+}
+
+export interface AdsbPlane {
+  hex: string;
+  callsign: string;
+  reg: string;
+  type: string;
+  lat: number;
+  lon: number;
+  altFt: number;
+  ground: boolean;
+  speedKt: number;
+  track: number;
+  category: string;
+  squawk: string;
+  military: boolean;
+  distKm: number;
+  seen: string;
+}
+
+export interface AdsbJob {
+  component: '' | 'readsb' | 'fr24';
+  running: boolean;
+  error: string;
+  started: string | null;
+  finished: string | null;
+}
+
+export interface AdsbStatus {
+  supported: boolean;
+  sdrs: { name: string; usb: string }[] | null;
+  decoder: AdsbComponent;
+  fr24: AdsbComponent;
+  adsbx: AdsbComponent;
+  tar1090: string;
+  source: string;
+  readError: string;
+  lastRead: string | null;
+  messages: number;
+  planes: AdsbPlane[];
+  sending: boolean;
+  sentAt: string | null;
+  job: AdsbJob;
+}
+
+export interface AdsbInfo {
+  config: AdsbConfig;
+  status: AdsbStatus;
+}
+
+export interface AdsbSaveResult {
+  config: AdsbConfig;
+  steps: { step: string; ok: boolean; error: string }[];
+}

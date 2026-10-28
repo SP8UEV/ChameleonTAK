@@ -44,6 +44,23 @@ type PanelAccess struct {
 	Allow    []string `json:"allow"` // IP addresses, networks (CIDR) and MAC addresses
 }
 
+// ADSB configures the ADS-B receiver on the Pi: aircraft go to TAK clients as CoT, and the
+// decoder can feed Flightradar24 and ADS-B Exchange.
+type ADSB struct {
+	Bridge     bool     `json:"bridge"` // send aircraft to TAK clients
+	Source     string   `json:"source"` // aircraft.json path or URL; "" = detect
+	Lat        float64  `json:"lat"`    // antenna position
+	Lon        float64  `json:"lon"`
+	AltM       float64  `json:"altM"`       // antenna height above sea level
+	MaxRangeKm int      `json:"maxRangeKm"` // 0 = no limit
+	MaxAltFt   int      `json:"maxAltFt"`   // 0 = no limit
+	Groups     []string `json:"groups"`     // empty = every client
+	FR24       bool     `json:"fr24"`
+	FR24Key    string   `json:"fr24Key"`
+	ADSBX      bool     `json:"adsbx"`
+	ADSBXUUID  string   `json:"adsbxUuid"`
+}
+
 type Network struct {
 	Mode            string `json:"mode"` // lan | hotspot
 	StaticIP        bool   `json:"staticIp"`
@@ -72,6 +89,7 @@ type Config struct {
 	Network            Network     `json:"network"`
 	DDNS               DDNS        `json:"ddns"`
 	PanelAccess        PanelAccess `json:"panelAccess"`
+	ADSB               ADSB        `json:"adsb"`
 }
 
 func DefaultPorts() Ports {
@@ -94,6 +112,7 @@ func Default() Config {
 			ExtraPrefs:  map[string]string{},
 		},
 		MapTileURL: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+		ADSB:       ADSB{MaxRangeKm: 150},
 		Network:    Network{Mode: "lan", HotspotSSID: "ChameleonTAK"},
 	}
 }
@@ -165,6 +184,7 @@ func (m *Manager) Get() Config {
 	c := m.cfg
 	c.Platforms = append([]string(nil), m.cfg.Platforms...)
 	c.PanelAccess.Allow = append([]string(nil), m.cfg.PanelAccess.Allow...)
+	c.ADSB.Groups = append([]string(nil), m.cfg.ADSB.Groups...)
 	c.Profile.ExtraPrefs = make(map[string]string, len(m.cfg.Profile.ExtraPrefs))
 	for k, v := range m.cfg.Profile.ExtraPrefs {
 		c.Profile.ExtraPrefs[k] = v
@@ -179,6 +199,7 @@ func (m *Manager) Update(fn func(c *Config) error) (Config, error) {
 	c := m.cfg
 	c.Platforms = append([]string(nil), m.cfg.Platforms...)
 	c.PanelAccess.Allow = append([]string(nil), m.cfg.PanelAccess.Allow...)
+	c.ADSB.Groups = append([]string(nil), m.cfg.ADSB.Groups...)
 	extra := make(map[string]string, len(m.cfg.Profile.ExtraPrefs))
 	for k, v := range m.cfg.Profile.ExtraPrefs {
 		extra[k] = v

@@ -23,6 +23,7 @@ const Missions = lazy(() => import('./pages/Missions'));
 const MissionDetail = lazy(() => import('./pages/MissionDetail'));
 const Certificates = lazy(() => import('./pages/Certificates'));
 const SettingsPage = lazy(() => import('./pages/Settings'));
+const AdsbPage = lazy(() => import('./pages/Adsb'));
 const NotFound = lazy(() => import('./pages/NotFound'));
 
 const PUBLIC_PREFIXES = ['/login', '/join/', '/setup'];
@@ -99,6 +100,7 @@ export default function App() {
               <Route path="/missions" element={<Missions />} />
               <Route path="/missions/:name" element={<MissionDetail />} />
               <Route path="/certs" element={<Certificates />} />
+              <Route path="/adsb" element={<AdsbPage />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="*" element={<NotFound />} />
             </Route>
