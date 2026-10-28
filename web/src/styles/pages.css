@@ -756,6 +756,7 @@
   border-radius: 0 0 var(--r-sm) var(--r-sm);
 }
 .onboard-caption {
+  max-width: 260px;
   font-family: var(--font-head);
   font-weight: 600;
   font-size: var(--fs-xl);
@@ -766,8 +767,9 @@
 }
 .onboard-native {
   display: flex;
-  align-items: center;
-  gap: var(--sp-4);
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-2);
 }
 .onboard-native .qr {
   flex: none;

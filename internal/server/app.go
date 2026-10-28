@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"log"
 	"log/slog"
 	"net"
 	"net/http"
@@ -343,6 +344,23 @@ func (a *App) listenerStates() []ListenerState {
 	return append([]ListenerState(nil), a.states...)
 }
 
+// httpErrorLog takes net/http's server errors: failed TLS handshakes (a phone rejecting the
+// server certificate, for example) go to the event log, everything else stays at debug level.
+type httpErrorLog struct {
+	log  *slog.Logger
+	addr string
+}
+
+func (l httpErrorLog) Write(p []byte) (int, error) {
+	msg := strings.TrimSpace(string(p))
+	if strings.Contains(msg, "TLS handshake error") {
+		l.log.Info("nieudane połączenie TLS", "port", strings.TrimPrefix(l.addr, ":"), "err", strings.TrimPrefix(msg, "http: "))
+	} else {
+		l.log.Debug(msg)
+	}
+	return len(p), nil
+}
+
 func (a *App) serveTLS(addr string, h http.Handler, cfg *tls.Config) (func(), error) {
 	ln, err := tls.Listen("tcp", addr, cfg)
 	if err != nil {
@@ -351,7 +369,7 @@ func (a *App) serveTLS(addr string, h http.Handler, cfg *tls.Config) (func(), er
 	srv := &http.Server{
 		Handler:           h,
 		ReadHeaderTimeout: 20 * time.Second,
-		ErrorLog:          slog.NewLogLogger(a.log.Handler(), slog.LevelDebug),
+		ErrorLog:          log.New(httpErrorLog{a.log, addr}, "", 0),
 	}
 	go func() {
 		if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {

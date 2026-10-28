@@ -113,7 +113,8 @@ export function DeviceCard({
         <div className="onboard">
           <div className="onboard-primary">
             <QrCode value={enr.qr.join} size={240} label="Kod QR strony dołączania" />
-            <div className="onboard-caption">Zeskanuj aparatem telefonu (nie skanerem w aplikacji TAK)</div>
+            <div className="onboard-caption">Zeskanuj aparatem telefonu</div>
+            <div className="xsmall muted">nie skanerem w aplikacji TAK</div>
             <div className="row xsmall muted" style={{ justifyContent: 'center', gap: 4 }}>
               <Link2 size={14} />
               <a href={enr.joinUrl} target="_blank" rel="noreferrer" className="ellipsis" style={{ maxWidth: 200 }}>
@@ -125,7 +126,7 @@ export function DeviceCard({
           <div className="onboard-side stack">
             {enr.qr.native && (
               <div className="onboard-native">
-                <QrCode value={enr.qr.native} size={132} label="Kod QR dla aplikacji" />
+                <QrCode value={enr.qr.native} size={device.platform === 'atak' ? 150 : 220} label="Kod QR dla aplikacji" />
                 <div className="small">{nativeLabel}</div>
               </div>
             )}
