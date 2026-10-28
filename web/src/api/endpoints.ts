@@ -5,6 +5,7 @@ import type {
   Cert,
   ChatMessage,
   Client,
+  ClientAddress,
   DdnsStatus,
   CreateUserRequest,
   Dashboard,
@@ -45,6 +46,7 @@ export const api = {
     http.post<Me>('/api/login', { username, password }, { noAuthRedirect: true }),
   logout: () => http.post<void>('/api/logout', {}, { noAuthRedirect: true }),
   me: () => http.get<Me>('/api/me'),
+  changePassword: (current: string, next: string) => http.post<void>('/api/me/password', { current, new: next }),
 
   // 4.2 Pulpit, ustawienia, system
   dashboard: () => http.get<Dashboard>('/api/dashboard'),
@@ -55,6 +57,7 @@ export const api = {
   publicIp: () => http.get<PublicIP>('/api/system/public-ip'),
   ddnsUpdate: () => http.post<DdnsStatus>('/api/system/ddns/update'),
   portCheck: (fresh = false) => http.get<PortCheck>(`/api/system/port-check${fresh ? '?fresh=1' : ''}`),
+  clientAddress: () => http.get<ClientAddress>('/api/system/client-address'),
   reboot: () => http.post<void>('/api/system/reboot'),
   network: (req: NetworkRequest) => http.post<void>('/api/system/network', req),
   restore: (file: File) => http.upload<void>('/api/system/restore', file),

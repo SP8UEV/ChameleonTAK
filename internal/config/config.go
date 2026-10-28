@@ -38,6 +38,12 @@ type DDNS struct {
 	URL      string `json:"url"`      // update URL of any other provider; {ip} and {domain} are substituted
 }
 
+// PanelAccess limits the admin panel to listed addresses; the join pages stay open to phones.
+type PanelAccess struct {
+	Restrict bool     `json:"restrict"`
+	Allow    []string `json:"allow"` // IP addresses, networks (CIDR) and MAC addresses
+}
+
 type Network struct {
 	Mode            string `json:"mode"` // lan | hotspot
 	StaticIP        bool   `json:"staticIp"`
@@ -65,6 +71,7 @@ type Config struct {
 	ProfileUpdatedAt   time.Time   `json:"profileUpdatedAt"` // last change of the device profile settings
 	Network            Network     `json:"network"`
 	DDNS               DDNS        `json:"ddns"`
+	PanelAccess        PanelAccess `json:"panelAccess"`
 }
 
 func DefaultPorts() Ports {
@@ -157,6 +164,7 @@ func (m *Manager) Get() Config {
 	defer m.mu.RUnlock()
 	c := m.cfg
 	c.Platforms = append([]string(nil), m.cfg.Platforms...)
+	c.PanelAccess.Allow = append([]string(nil), m.cfg.PanelAccess.Allow...)
 	c.Profile.ExtraPrefs = make(map[string]string, len(m.cfg.Profile.ExtraPrefs))
 	for k, v := range m.cfg.Profile.ExtraPrefs {
 		c.Profile.ExtraPrefs[k] = v
@@ -170,6 +178,7 @@ func (m *Manager) Update(fn func(c *Config) error) (Config, error) {
 	defer m.mu.Unlock()
 	c := m.cfg
 	c.Platforms = append([]string(nil), m.cfg.Platforms...)
+	c.PanelAccess.Allow = append([]string(nil), m.cfg.PanelAccess.Allow...)
 	extra := make(map[string]string, len(m.cfg.Profile.ExtraPrefs))
 	for k, v := range m.cfg.Profile.ExtraPrefs {
 		extra[k] = v

@@ -6,6 +6,7 @@ import type { AccessMode, DdnsConfig, NetworkMode, PlatformKey, Ports, Settings 
 import { AccessChoice, CertStatusView, DetectIpButton, PortForwarding } from '../components/PublicAccess';
 import { DdnsFields, DdnsStatusView } from '../components/Ddns';
 import { PortTest } from '../components/PortTest';
+import { AccessListForm, PasswordForm } from '../components/PanelSecurity';
 import { accessModeOf, isPublicIp, looksPublicDomain, validEmail } from '../lib/access';
 import { useSession } from '../app/session';
 import { useConfirm } from '../components/Confirm';
@@ -20,6 +21,7 @@ const DEFAULT_TILES = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 const SECTIONS = [
   { id: 'serwer', label: 'Serwer i dostęp' },
   { id: 'test-portow', label: 'Test portów' },
+  { id: 'bezpieczenstwo', label: 'Bezpieczeństwo panelu' },
   { id: 'porty', label: 'Porty' },
   { id: 'aplikacje', label: 'Aplikacje' },
   { id: 'profil', label: 'Profil urządzeń' },
@@ -70,6 +72,7 @@ export default function SettingsPage() {
           <div className="stack-lg settings">
             <ServerSection s={s} save={save} />
             <PortTestSection />
+            <SecuritySection s={s} save={save} />
             <PortsSection s={s} save={save} />
             <PlatformsSection s={s} save={save} />
             <ProfileSection s={s} save={save} />
@@ -330,6 +333,17 @@ function PortTestSection() {
       description="Sprawdza, które porty działają, które przepuszcza zapora i które widać z internetu — i podpowiada, co otworzyć, a co zamknąć."
     >
       <PortTest />
+    </Section>
+  );
+}
+
+/* ---------- Bezpieczeństwo panelu ---------- */
+function SecuritySection({ s, save }: { s: Settings; save: SaveFn }) {
+  return (
+    <Section id="bezpieczenstwo" title="Bezpieczeństwo panelu" description="Hasło administratora i urządzenia, z których można otworzyć panel.">
+      <PasswordForm />
+      <hr />
+      <AccessListForm value={s.panelAccess} save={(panelAccess) => save({ panelAccess })} />
     </Section>
   );
 }

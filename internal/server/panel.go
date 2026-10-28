@@ -40,6 +40,10 @@ func (a *App) panelHandler(isTLS bool) http.Handler {
 		if !cfg.SetupDone && a.captiveRedirect(w, r) {
 			return
 		}
+		if cfg.SetupDone && cfg.PanelAccess.Restrict && !phonePath(r.URL.Path) && !a.panelAllowed(r) {
+			denyPanel(w, r)
+			return
+		}
 		if !isTLS && cfg.SetupDone && cfg.ForceHTTPS && !phonePath(r.URL.Path) {
 			host := r.Host
 			if h, _, err := net.SplitHostPort(host); err == nil {
@@ -124,6 +128,7 @@ func (a *App) apiMux() *http.ServeMux {
 	pub("POST /api/login", a.hLogin)
 	pub("POST /api/logout", a.hLogout)
 	pub("GET /api/me", a.hMe)
+	adm("POST /api/me/password", a.hChangePassword)
 	pub("GET /api/setup/public-ip", a.hDetectPublicIP)
 	pub("GET /api/join/{token}", a.hJoin)
 	pub("GET /api/join/{token}/package/{platform}", a.hJoinPackage)
@@ -140,6 +145,7 @@ func (a *App) apiMux() *http.ServeMux {
 	adm("GET /api/system/public-ip", a.hDetectPublicIP)
 	adm("POST /api/system/ddns/update", a.hDDNSUpdate)
 	adm("GET /api/system/port-check", a.hPortCheck)
+	adm("GET /api/system/client-address", a.hClientAddress)
 	adm("POST /api/system/reboot", a.hReboot)
 	adm("POST /api/system/network", a.hNetwork)
 	adm("GET /api/system/backup", a.hBackup)
@@ -200,6 +206,9 @@ func (a *App) requireAdmin(h http.Handler) http.Handler {
 		h.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), userKey, u)))
 	})
 }
+
+// currentUser is the administrator a requireAdmin handler runs for.
+func currentUser(r *http.Request) *store.User { return r.Context().Value(userKey).(*store.User) }
 
 func (a *App) sessionUser(r *http.Request) *store.User {
 	c, err := r.Cookie(sessionCookie)

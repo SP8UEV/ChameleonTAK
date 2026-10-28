@@ -191,6 +191,7 @@ type settingsJSON struct {
 	MapTileURL         string             `json:"mapTileUrl"`
 	Network            map[string]any     `json:"network"`
 	DDNS               config.DDNS        `json:"ddns"`
+	PanelAccess        config.PanelAccess `json:"panelAccess"`
 }
 
 func settingsView(c config.Config) settingsJSON {
@@ -198,7 +199,7 @@ func settingsView(c config.Config) settingsJSON {
 		ServerName: c.ServerName, DisplayName: c.DisplayName, Organization: c.Organization, Ports: c.Ports,
 		Platforms: c.Platforms, CertValidityDays: c.CertValidityDays, TokenValidityHours: c.TokenValidityHours,
 		CertPassword: c.CertPassword, ForceHTTPS: c.ForceHTTPS, LetsEncrypt: c.LetsEncrypt, Profile: c.Profile,
-		MapTileURL: c.MapTileURL, DDNS: c.DDNS,
+		MapTileURL: c.MapTileURL, DDNS: c.DDNS, PanelAccess: c.PanelAccess,
 		Network: map[string]any{"mode": c.Network.Mode, "staticIp": c.Network.StaticIP, "wifiSsid": c.Network.WifiSSID, "hotspotSsid": c.Network.HotspotSSID},
 	}
 }
@@ -311,6 +312,23 @@ func (a *App) hPutSettings(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
+	allow, err := normalizeAccessList(cur.PanelAccess.Allow)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	cur.PanelAccess.Allow = allow
+	if cur.PanelAccess.Restrict {
+		if len(allow) == 0 {
+			fail(w, invalid("Dodaj co najmniej jeden adres, z którego panel ma być dostępny."))
+			return
+		}
+		// Refuse a list that would lock out the browser saving it.
+		if !accessAllowed(cur.PanelAccess, clientIP(r), system.NeighborMAC) {
+			fail(w, invalid(fmt.Sprintf("Twój obecny adres (%s) nie jest na liście — po zapisaniu straciłbyś dostęp do panelu. Dodaj go najpierw.", clientIP(r))))
+			return
+		}
+	}
 	newCfg, err := a.cfg.Update(func(c *config.Config) error {
 		c.ServerName, c.DisplayName, c.Organization = cur.ServerName, strings.TrimSpace(cur.DisplayName), strings.TrimSpace(cur.Organization)
 		c.Ports, c.Platforms = cur.Ports, cur.Platforms
@@ -319,7 +337,7 @@ func (a *App) hPutSettings(w http.ResponseWriter, r *http.Request) {
 			c.ProfileUpdatedAt = time.Now().UTC()
 		}
 		c.ForceHTTPS, c.LetsEncrypt, c.Profile, c.MapTileURL = cur.ForceHTTPS, cur.LetsEncrypt, cur.Profile, strings.TrimSpace(cur.MapTileURL)
-		c.DDNS = cur.DDNS
+		c.DDNS, c.PanelAccess = cur.DDNS, cur.PanelAccess
 		if c.DisplayName == "" {
 			c.DisplayName = "ChameleonTAK"
 		}

@@ -32,6 +32,8 @@ func main() {
 		err = cmdSetup(os.Args[2:])
 	case "reset-admin":
 		err = cmdResetAdmin(os.Args[2:])
+	case "panel-access":
+		err = cmdPanelAccess(os.Args[2:])
 	case "factory-reset":
 		err = cmdFactoryReset(os.Args[2:])
 	case "sys":
@@ -57,6 +59,7 @@ Użycie:
   chameleontak serve         [--data DIR] [--http ADDR] [--https ADDR] [--debug]
   chameleontak setup         --server-name X --admin-user U --admin-pass P [--platforms atak,itak] [--data DIR]
   chameleontak reset-admin   --password P [--user admin] [--data DIR]
+  chameleontak panel-access  off [--data DIR]   (wyłącza ograniczenie panelu do wybranych adresów)
   chameleontak factory-reset --yes [--data DIR]
   chameleontak version
 `)
@@ -157,6 +160,25 @@ func cmdResetAdmin(args []string) error {
 		return err
 	}
 	fmt.Printf("Hasło administratora %q zostało zmienione.\n", *user)
+	return nil
+}
+
+func cmdPanelAccess(args []string) error {
+	if len(args) == 0 || args[0] != "off" {
+		return fmt.Errorf("użycie: chameleontak panel-access off [--data DIR]")
+	}
+	fs := flag.NewFlagSet("panel-access", flag.ExitOnError)
+	data := fs.String("data", defaultDataDir(), "katalog danych")
+	_ = fs.Parse(args[1:])
+	app, err := openApp(*data, server.Options{}, false)
+	if err != nil {
+		return err
+	}
+	defer app.Close()
+	if err := app.DisablePanelAccess(); err != nil {
+		return err
+	}
+	fmt.Println("Panel jest znowu dostępny z każdego adresu. Uruchom usługę ponownie: sudo systemctl restart chameleontak")
 	return nil
 }
 

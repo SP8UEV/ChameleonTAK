@@ -90,6 +90,17 @@ export interface DdnsStatus {
   message: string;
 }
 
+/** Ograniczenie panelu do wybranych adresów IP, sieci i adresów MAC. */
+export interface PanelAccessConfig {
+  restrict: boolean;
+  allow: string[];
+}
+
+export interface ClientAddress {
+  ip: string;
+  mac: string;
+}
+
 export interface PortResult {
   port: number;
   external: number;
@@ -218,6 +229,7 @@ export interface Settings {
   profile: DeviceProfile;
   mapTileUrl: string;
   ddns: DdnsConfig;
+  panelAccess: PanelAccessConfig;
 }
 
 export interface SettingsUpdateResult {
