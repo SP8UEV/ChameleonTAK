@@ -151,6 +151,7 @@ func (a *App) registerMissionRoutes(m *http.ServeMux) {
 	m.HandleFunc("POST /Marti/api/missions/logs/entries", a.mAddLog)
 	m.HandleFunc("PUT /Marti/api/missions/logs/entries", a.mAddLog)
 	m.HandleFunc("DELETE /Marti/api/missions/logs/entries/{id}", a.mDeleteLog)
+	a.registerMissionExtraRoutes(m)
 }
 
 func (a *App) loadMission(w http.ResponseWriter, r *http.Request) (*store.Mission, bool) {
@@ -297,6 +298,7 @@ func (a *App) mDeleteMission(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.notifyMission(m, subs, "DELETE", nil)
+	a.broadcastMissionDeleted(m)
 	a.martiJSON(w, 200, "Mission", []any{view})
 }
 

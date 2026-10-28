@@ -128,6 +128,11 @@ func (a *App) martiHandler() http.Handler {
 		}
 		a.log.Debug("marti", "method", r.Method, "path", r.URL.Path, "query", r.URL.RawQuery, "user", caller.User.Username)
 		r = r.WithContext(withValue(r.Context(), martiCtxKey{}, caller))
+		r, found := a.missionByGUID(r)
+		if !found {
+			http.Error(w, "mission not found", http.StatusNotFound)
+			return
+		}
 		m.ServeHTTP(w, r)
 	})
 }

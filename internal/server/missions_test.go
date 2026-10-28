@@ -68,4 +68,31 @@ func TestMissionLifecycle(t *testing.T) {
 	if code != 200 || !strings.Contains(body, "ADD_CONTENT") || !strings.Contains(body, "CREATE_MISSION") {
 		t.Fatalf("changes: %d %s", code, body)
 	}
+
+	// Data Sync extras: the owner sets a role (the client hears t-x-m-r), the GUID twin
+	// answers like the name, a password can be set, and deleting tells the groups (t-x-m-d).
+	if code, body := do(cb, "PUT", "/Marti/api/missions/Operacja1/role?clientUid=UID-ZOL&role=MISSION_READONLY_SUBSCRIBER", ""); code != 403 {
+		t.Fatalf("subscriber changing roles: %d %s", code, body)
+	}
+	if code, body := do(ca, "PUT", "/Marti/api/missions/Operacja1/role?clientUid=UID-ZOL&role=MISSION_READONLY_SUBSCRIBER", ""); code != 200 {
+		t.Fatalf("set role: %d %s", code, body)
+	}
+	b.expect(t, `t-x-m-r`)
+	mi, err := app.store.GetMission("Operacja1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if code, body := do(cb, "GET", "/Marti/api/missions/guid/"+mi.GUID+"/subscription?uid=UID-ZOL", ""); code != 200 || !strings.Contains(body, "MISSION_READONLY_SUBSCRIBER") {
+		t.Fatalf("guid twin: %d %s", code, body)
+	}
+	if code, body := do(ca, "PUT", "/Marti/api/missions/Operacja1/password?password=tajne123", ""); code != 200 || !strings.Contains(body, `"passwordProtected":true`) {
+		t.Fatalf("set password: %d %s", code, body)
+	}
+	if code, body := do(cb, "GET", "/Marti/api/missions/Operacja1/contacts", ""); code != 200 || !strings.Contains(body, "UID-ZOL") {
+		t.Fatalf("contacts: %d %s", code, body)
+	}
+	if code, body := do(ca, "DELETE", "/Marti/api/missions/Operacja1", ""); code != 200 {
+		t.Fatalf("delete: %d %s", code, body)
+	}
+	b.expect(t, `t-x-m-d`)
 }
