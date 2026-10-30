@@ -176,6 +176,9 @@ func (a *App) applyFirewall() error {
 	if cfg.Video.Enabled {
 		ports = append(ports, system.VideoRTMPPort, system.VideoRTSPPort)
 	}
+	if system.FileExists("/usr/local/share/tar1090/html") {
+		ports = append(ports, system.Tar1090Port()) // the full ADS-B map from the decoder installer
+	}
 	var s []string
 	for _, p := range ports {
 		s = append(s, fmt.Sprint(p))

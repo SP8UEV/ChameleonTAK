@@ -421,6 +421,9 @@ func (a *App) hADSBInstall(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		a.log.Info("ADS-B: zainstalowano", "składnik", req.Component)
+		if err := a.applyFirewall(); err != nil && err != system.ErrUnsupported {
+			a.log.Error("firewall", "err", err)
+		}
 		// Apply the saved settings to what was just installed.
 		cur := a.cfg.Get().ADSB
 		a.applyADSB(config.ADSB{}, cur)
