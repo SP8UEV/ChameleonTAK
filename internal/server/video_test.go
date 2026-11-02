@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -40,6 +41,14 @@ func TestVideoStreamAccess(t *testing.T) {
 	_ = json.Unmarshal(raw, &st)
 	if !strings.HasPrefix(st.PublishURL, "rtmp://") || !strings.Contains(st.LarixURL, "larix://set/v1") {
 		t.Fatalf("publish links: %+v", st)
+	}
+	// Larix splits an RTMP address into an application and a stream name and needs both.
+	pu, err := url.Parse(st.PublishURL)
+	if err != nil || len(strings.Split(strings.Trim(pu.Path, "/"), "/")) != 2 || pu.Query().Get("pass") != st.PublishKey {
+		t.Fatalf("publish URL %q: want rtmp://host:port/app/stream?user=…&pass=…", st.PublishURL)
+	}
+	if !strings.Contains(st.LarixURL, "conn[][url]="+url.QueryEscape(st.PublishURL)) || !strings.Contains(st.LarixURL, "conn[][name]=TAK%3A%20Dron%201") {
+		t.Fatalf("Larix link does not carry the publish URL: %s", st.LarixURL)
 	}
 
 	ask := func(action, user, pass string) int {

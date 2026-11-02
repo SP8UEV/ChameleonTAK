@@ -50,7 +50,14 @@ type videoState struct {
 	pushed map[string]time.Time // path -> last feed sent to the audience
 }
 
-func (a *App) videoPath(s config.VideoStream) string { return a.ID() + "-" + s.ID }
+// videoPath is the MediaMTX path of a stream. It has two segments ("<server>/<stream>"), because
+// RTMP encoders such as Larix split the address into an application and a stream name and refuse
+// an address without both.
+func (a *App) videoPath(s config.VideoStream) string { return a.ID() + "/" + s.ID }
+
+// videoUID identifies the stream in TAK clients' video lists. It stays as it was before the path
+// gained its second segment, so clients keep one entry per stream.
+func (a *App) videoUID(s config.VideoStream) string { return "video-" + a.ID() + "-" + s.ID }
 
 // videoToken is the password a user (or the panel) reads streams with.
 func (a *App) videoToken(user string) string {
@@ -124,7 +131,7 @@ func (a *App) hVideoAuth(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-// findStream maps a MediaMTX path ("<server>-<stream>") to its server and stream.
+// findStream maps a MediaMTX path ("<server>/<stream>") to its server and stream.
 func (a *App) findStream(path string) (*App, config.VideoStream, bool) {
 	for _, s := range a.servers() {
 		for _, st := range s.cfg.Get().Streams {
@@ -252,7 +259,7 @@ func (a *App) pushVideoFeed(st config.VideoStream) {
 func (a *App) videoFeedCoT(st config.VideoStream, username string) []byte {
 	u, address, port := a.viewerURL(st, username)
 	now := time.Now()
-	uid := "video-" + a.videoPath(st)
+	uid := a.videoUID(st)
 	return []byte(fmt.Sprintf(`<event version="2.0" uid="%[1]s" type="b-i-v" how="m-g" time="%[2]s" start="%[2]s" stale="%[3]s"><point lat="0.0" lon="0.0" hae="0.0" ce="9999999.0" le="9999999.0"/><detail><__video uid="%[1]s" url="%[4]s"><ConnectionEntry networkTimeout="12000" uid="%[1]s" path="/%[5]s" protocol="rtsp" bufferTime="-1" address="%[6]s" port="%[7]d" roverPort="-1" rtspReliable="1" ignoreEmbeddedKLV="false" alias="%[8]s"/></__video><contact callsign="%[8]s"/></detail></event>`,
 		cot.Escape(uid), cot.FormatTime(now), cot.FormatTime(now.Add(2*time.Minute)), cot.Escape(u),
 		cot.Escape(a.videoPath(st)), cot.Escape(address), port, cot.Escape(st.Name)))
@@ -288,7 +295,7 @@ func (a *App) mVideoConnections(w http.ResponseWriter, r *http.Request) {
 			}
 			u, address, port := a.viewerURL(st, caller.User.Username)
 			out.Feeds = append(out.Feeds, feed{
-				UID: "video-" + a.videoPath(st), Active: a.videoLive(st).Ready, Alias: st.Name, TypeName: "Vid", URL: u,
+				UID: a.videoUID(st), Active: a.videoLive(st).Ready, Alias: st.Name, TypeName: "Vid", URL: u,
 				Protocol: "rtsp", Address: address, Port: port, Path: "/" + a.videoPath(st), RoverPort: -1,
 				Timeout: 12000, Buffer: -1, RTSPReliable: 1,
 			})
@@ -406,7 +413,7 @@ func (a *App) streamOut(st config.VideoStream) streamView {
 		host = "[" + host + "]"
 	}
 	publish := fmt.Sprintf("rtmp://%s:%d/%s?user=%s&pass=%s", host, system.VideoRTMPPort, a.videoPath(st), videoPublisher, st.PublishKey)
-	larix := "larix://set/v1?conn[][url]=" + url.QueryEscape(publish) + "&conn[][name]=" + url.QueryEscape("TAK: "+st.Name) + "&conn[][overwrite]=on"
+	larix := "larix://set/v1?conn[][url]=" + groveEscape(publish) + "&conn[][name]=" + groveEscape("TAK: "+st.Name) + "&conn[][overwrite]=on"
 	live := a.videoLive(st)
 	if st.Groups == nil {
 		st.Groups = []string{}
@@ -416,6 +423,10 @@ func (a *App) streamOut(st config.VideoStream) streamView {
 	}
 	return streamView{VideoStream: st, Path: a.videoPath(st), Live: live.Ready, Viewers: live.Readers, PublishURL: publish, LarixURL: larix}
 }
+
+// groveEscape encodes a Larix Grove value the way Larix's own examples do: spaces as %20, since
+// a + would stay in the connection name.
+func groveEscape(v string) string { return strings.ReplaceAll(url.QueryEscape(v), "+", "%20") }
 
 func (a *App) hListStreams(w http.ResponseWriter, r *http.Request) {
 	out := []streamView{}

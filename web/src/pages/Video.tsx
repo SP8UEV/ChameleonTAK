@@ -200,16 +200,27 @@ function PublishDialog({ s, onClose }: { s: VideoStream; onClose: () => void }) 
         <div className="stack-sm" style={{ alignItems: 'center', textAlign: 'center' }}>
           <QrCode value={s.larixUrl} size={220} label="Kod QR dla Larix Broadcaster" />
           <span className="small">Zeskanuj aparatem telefonu z zainstalowanym Larix Broadcaster</span>
+          <a className="btn btn-sm" href={s.larixUrl}>
+            <Smartphone size={16} /> Otwórz w Larix
+          </a>
+          <span className="xsmall faint">Przycisk działa, gdy ten panel jest otwarty na telefonie z Larix.</span>
         </div>
         <ol className="small stack-sm" style={{ margin: 0, paddingLeft: 18 }}>
           <li>
             Zainstaluj darmową aplikację <strong>Larix Broadcaster</strong> (App Store / Google Play).
           </li>
-          <li>Zeskanuj kod aparatem telefonu — Larix sam doda połączenie „TAK: {s.name}”.</li>
+          <li>
+            <strong>iPhone:</strong> zeskanuj kod zwykłym aparatem i stuknij „Otwórz w Larix”. Larix sam doda połączenie „TAK: {s.name}”.
+          </li>
+          <li>
+            <strong>Android:</strong> wbudowany aparat często nie otwiera takich kodów. Użyj skanera QR, który otwiera linki
+            (np. QR Droid), albo skopiuj link Larix poniżej i w Larix wybierz Ustawienia → Połączenia → „Import Grove settings”.
+          </li>
           <li>W Larix naciśnij czerwony przycisk nagrywania. Strumień pojawi się tu jako „NA ŻYWO”, a odbiorcy dostaną go w ATAK.</li>
-          <li>Telefon musi widzieć serwer: ta sama sieć, ZeroTier albo przekierowany port RTMP.</li>
+          <li>Telefon musi widzieć serwer: ta sama sieć, ZeroTier albo przekierowany port RTMP (1935).</li>
         </ol>
       </div>
+      <CopyField label="Link Larix (do importu w aplikacji)" value={s.larixUrl} />
       <CopyField label="Adres RTMP (dla innych aplikacji, np. OBS, Prism, DJI)" value={s.publishUrl} />
       <p className="xsmall faint">Adres zawiera klucz nadawania — nie udostępniaj go nikomu poza osobą z kamerą.</p>
     </Modal>
