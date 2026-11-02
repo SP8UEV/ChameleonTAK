@@ -523,6 +523,30 @@ export interface AdsbConfig {
   fr24Key: string;
   adsbx: boolean;
   adsbxUuid: string;
+  /** Dostawca samolotów z internetu (AdsbProvider.id); pusty = wyłączone. */
+  online: string;
+  openSkyId: string;
+  /** Wysyłany tylko przy zmianie; serwer nigdy go nie zwraca. */
+  openSkySecret: string;
+}
+
+export interface AdsbProvider {
+  id: string;
+  name: string;
+  site: string;
+  terms: string;
+  /** Opcjonalne konto API podnosi limity. */
+  account: boolean;
+}
+
+export interface AdsbOnline {
+  provider: string;
+  name: string;
+  /** Samoloty, które widzi tylko internet. */
+  planes: number;
+  lastFetch: string | null;
+  error: string;
+  intervalS: number;
 }
 
 export interface AdsbComponent {
@@ -547,6 +571,8 @@ export interface AdsbPlane {
   military: boolean;
   distKm: number;
   seen: string;
+  /** Nazwa dostawcy z internetu; pusta = własny odbiornik. */
+  source: string;
 }
 
 export interface AdsbJob {
@@ -571,17 +597,21 @@ export interface AdsbStatus {
   planes: AdsbPlane[];
   sending: boolean;
   sentAt: string | null;
+  online: AdsbOnline;
   job: AdsbJob;
 }
 
 export interface AdsbInfo {
   config: AdsbConfig;
   status: AdsbStatus;
+  providers: AdsbProvider[];
+  openSkySecretSet: boolean;
 }
 
 export interface AdsbSaveResult {
   config: AdsbConfig;
   steps: { step: string; ok: boolean; error: string }[];
+  openSkySecretSet: boolean;
 }
 
 /* ---------- Kilka serwerów TAK na jednym urządzeniu ---------- */

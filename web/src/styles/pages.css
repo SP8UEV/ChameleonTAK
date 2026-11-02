@@ -1373,6 +1373,10 @@
 .adsb-gnd svg {
   fill: #9aa3ad;
 }
+/* Samoloty z internetu: ten sam kształt, jaśniejszy, żeby odróżnić je od własnej anteny */
+.adsb-net svg {
+  opacity: 0.6;
+}
 .adsb-plane-label {
   position: absolute;
   left: 24px;

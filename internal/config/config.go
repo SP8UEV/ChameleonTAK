@@ -60,6 +60,10 @@ type ADSB struct {
 	FR24Key    string   `json:"fr24Key"`
 	ADSBX      bool     `json:"adsbx"`
 	ADSBXUUID  string   `json:"adsbxUuid"`
+	// Online adds aircraft from an internet provider (adsb.Providers); "" = off.
+	Online        string `json:"online"`
+	OpenSkyID     string `json:"openSkyId"` // optional OpenSky API client
+	OpenSkySecret string `json:"openSkySecret"`
 }
 
 // ZeroTier is the virtual network the device joined for access without a public address.

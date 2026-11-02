@@ -2,14 +2,14 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import L from 'leaflet';
 import { Circle, MapContainer, Marker, Popup, TileLayer, useMap, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
-import { Antenna, Cpu, Download, ExternalLink, Globe, LoaderCircle, LocateFixed, MapPin, Plane, Radio, Save, Send } from 'lucide-react';
+import { Antenna, Cloud, Cpu, Download, ExternalLink, Globe, LoaderCircle, LocateFixed, MapPin, Plane, Radio, Save, Send } from 'lucide-react';
 import { api } from '../api/endpoints';
 import { errorMessage } from '../api/client';
-import type { AdsbConfig, AdsbInfo, AdsbPlane, AdsbStatus } from '../api/types';
+import type { AdsbConfig, AdsbInfo, AdsbPlane, AdsbProvider, AdsbStatus } from '../api/types';
 import { useSession } from '../app/session';
 import { Modal } from '../components/Modal';
 import { useToast } from '../components/Toast';
-import { AsyncView, CheckRow, Disclosure, Field, GroupPicker, Led, Notice, PageHeader } from '../components/ui';
+import { AsyncView, CheckRow, Choice, Disclosure, Field, GroupPicker, Led, Notice, PageHeader } from '../components/ui';
 import { fmtRelative } from '../lib/format';
 import { useApi } from '../lib/useApi';
 
@@ -22,7 +22,7 @@ export default function AdsbPage() {
     <>
       <PageHeader
         title="ADS-B"
-        description="Samoloty z odbiornika 1090 MHz na Raspberry Pi: na mapie aplikacji TAK oraz w serwisach Flightradar24 i ADS-B Exchange."
+        description="Samoloty z odbiornika 1090 MHz na Raspberry Pi albo z internetu: na mapie aplikacji TAK oraz w serwisach Flightradar24 i ADS-B Exchange."
       />
       <AsyncView state={state}>{(info) => <AdsbView info={info} reload={state.reload} />}</AsyncView>
     </>
@@ -31,7 +31,10 @@ export default function AdsbPage() {
 
 function AdsbView({ info, reload }: { info: AdsbInfo; reload: () => Promise<void> }) {
   const [cfg, setCfg] = useState<AdsbConfig>(info.config);
+  const [secretSet, setSecretSet] = useState(info.openSkySecretSet);
   const st = info.status;
+  const fromNet = st.planes.filter((p) => p.source).length;
+  const provider = info.providers.find((p) => p.id === info.config.online);
   return (
     <div className="stack-lg">
       {!st.supported && (
@@ -47,7 +50,16 @@ function AdsbView({ info, reload }: { info: AdsbInfo; reload: () => Promise<void
           <span>
             <Plane size={14} /> {st.planes.length} {planesWord(st.planes.length)} w zasięgu
             {cfg.maxRangeKm > 0 ? ` ${cfg.maxRangeKm} km` : ''}
+            {fromNet > 0 ? `, w tym ${fromNet} z internetu` : ''}
           </span>
+          {provider && (
+            <span>
+              Dane z internetu:{' '}
+              <a href={provider.site} target="_blank" rel="noreferrer">
+                {provider.name}
+              </a>
+            </span>
+          )}
           <span>Położenie anteny zmienisz w konfiguracji („Wskaż na mapie”).</span>
           {st.tar1090 && (
             <a href={st.tar1090} target="_blank" rel="noreferrer">
@@ -56,9 +68,23 @@ function AdsbView({ info, reload }: { info: AdsbInfo; reload: () => Promise<void
           )}
         </div>
       </section>
-      <ConfigForm cfg={cfg} setCfg={setCfg} saved={info.config} status={st} />
+      <ConfigForm
+        cfg={cfg}
+        setCfg={setCfg}
+        saved={info.config}
+        status={st}
+        providers={info.providers}
+        secretSet={secretSet}
+        setSecretSet={setSecretSet}
+      />
     </div>
   );
+}
+
+function fmtInterval(s: number) {
+  if (s < 60) return `${s} s`;
+  const m = Math.round(s / 60);
+  return `${m} min`;
 }
 
 function planesWord(n: number) {
@@ -141,6 +167,27 @@ function StatusCards({ st, cfg, reload }: { st: AdsbStatus; cfg: AdsbConfig; rel
         )}
       </StatusCard>
 
+      <StatusCard
+        icon={<Cloud size={18} />}
+        title="Z internetu"
+        state={!st.online.provider ? 'off' : st.online.error ? 'err' : st.online.lastFetch ? 'on' : 'warn'}
+      >
+        {!st.online.provider ? (
+          <span>Wyłączone. Bez własnej anteny możesz pobierać samoloty z otwartych serwisów (konfiguracja niżej).</span>
+        ) : st.online.error ? (
+          <span style={{ wordBreak: 'break-word' }}>
+            {st.online.name}: {st.online.error}
+          </span>
+        ) : st.online.lastFetch ? (
+          <span>
+            {st.online.name} · {st.online.planes} {planesWord(st.online.planes)} spoza anteny · co {fmtInterval(st.online.intervalS)} ·
+            odczyt {fmtRelative(st.online.lastFetch)}
+          </span>
+        ) : (
+          <span>{st.online.name}: pierwsze pobieranie…</span>
+        )}
+      </StatusCard>
+
       <StatusCard icon={<Radio size={18} />} title="Flightradar24" state={st.fr24.active ? 'on' : st.fr24.installed && cfg.fr24 ? 'warn' : 'off'}>
         {st.fr24.active ? (
           <span>{st.fr24.detail || 'Wysyła dane.'}</span>
@@ -193,12 +240,13 @@ const planeIcons = new Map<string, L.DivIcon>();
 function planeIcon(p: AdsbPlane): L.DivIcon {
   const rot = Math.round(p.track / 5) * 5;
   const kind = p.military ? 'mil' : p.ground ? 'gnd' : 'civ';
-  const key = `${kind}|${rot}|${p.callsign || p.hex}`;
+  const net = p.source ? ' adsb-net' : '';
+  const key = `${kind}${net}|${rot}|${p.callsign || p.hex}`;
   let icon = planeIcons.get(key);
   if (!icon) {
     const label = (p.callsign || p.reg || p.hex).replace(/[<>&"]/g, '');
     icon = L.divIcon({
-      className: `adsb-plane adsb-${kind}`,
+      className: `adsb-plane adsb-${kind}${net}`,
       html:
         `<svg viewBox="0 0 24 24" width="22" height="22" style="transform:rotate(${rot}deg)"><path d="M12 2c.8 0 1.3.8 1.3 1.8v5.4l7.7 4.6v2l-7.7-2.3v4.6l2.2 1.7v1.6L12 20.3l-3.5 1.1v-1.6l2.2-1.7v-4.6L3 15.8v-2l7.7-4.6V3.8C10.7 2.8 11.2 2 12 2z"/></svg>` +
         `<span class="adsb-plane-label">${label}</span>`,
@@ -472,6 +520,7 @@ function AdsbMap({ cfg, planes }: { cfg: AdsbConfig; planes: AdsbPlane[] }) {
               </span>
               {p.distKm > 0 && <span>{p.distKm.toFixed(0)} km od anteny</span>}
               <span className="code">ICAO {p.hex}{p.squawk ? ` · squawk ${p.squawk}` : ''}</span>
+              <span className="xsmall muted">{p.source ? `źródło: ${p.source}` : 'własna antena'}</span>
             </div>
           </Popup>
         </Marker>
@@ -481,7 +530,23 @@ function AdsbMap({ cfg, planes }: { cfg: AdsbConfig; planes: AdsbPlane[] }) {
 }
 
 /* ---------- Konfiguracja ---------- */
-function ConfigForm({ cfg, setCfg, saved, status }: { cfg: AdsbConfig; setCfg: (c: AdsbConfig) => void; saved: AdsbConfig; status: AdsbStatus }) {
+function ConfigForm({
+  cfg,
+  setCfg,
+  saved,
+  status,
+  providers,
+  secretSet,
+  setSecretSet,
+}: {
+  cfg: AdsbConfig;
+  setCfg: (c: AdsbConfig) => void;
+  saved: AdsbConfig;
+  status: AdsbStatus;
+  providers: AdsbProvider[];
+  secretSet: boolean;
+  setSecretSet: (v: boolean) => void;
+}) {
   const toast = useToast();
   const groups = useApi(api.groups, []);
   const servers = useApi(api.servers, []);
@@ -497,11 +562,15 @@ function ConfigForm({ cfg, setCfg, saved, status }: { cfg: AdsbConfig; setCfg: (
     e.preventDefault();
     if ((cfg.fr24 || cfg.adsbx) && cfg.lat === 0 && cfg.lon === 0) return setError('Ustaw położenie anteny (Wskaż na mapie).');
     if (cfg.fr24 && !/^[A-Za-z0-9]{8,40}$/.test(cfg.fr24Key)) return setError('Podaj poprawny klucz Flightradar24 (litery i cyfry).');
+    if (cfg.online && cfg.lat === 0 && cfg.lon === 0) return setError('Ustaw położenie (Wskaż na mapie): samoloty z internetu są pobierane wokół niego.');
+    if (cfg.online === 'opensky' && cfg.openSkyId && !cfg.openSkySecret && !(secretSet && cfg.openSkyId === saved.openSkyId))
+      return setError('Podaj client_secret klienta API OpenSky.');
     setError(null);
     setBusy(true);
     try {
       const res = await api.saveAdsb(cfg);
       setCfg(res.config);
+      setSecretSet(res.openSkySecretSet);
       setSteps(res.steps);
       if (res.steps.some((s) => !s.ok)) toast.warn('Zapisano, ale nie wszystko udało się zastosować.');
       else toast.ok('Zapisano ustawienia ADS-B.');
@@ -602,6 +671,9 @@ function ConfigForm({ cfg, setCfg, saved, status }: { cfg: AdsbConfig; setCfg: (
       )}
 
       <hr />
+      <OnlineSource cfg={cfg} set={set} providers={providers} secretSet={secretSet && cfg.openSkyId === saved.openSkyId} />
+
+      <hr />
       <h3 className="strong">Udostępnianie danych</h3>
       <CheckRow
         checked={cfg.fr24}
@@ -676,5 +748,88 @@ function ConfigForm({ cfg, setCfg, saved, status }: { cfg: AdsbConfig; setCfg: (
         </button>
       </div>
     </form>
+  );
+}
+
+/* ---------- Samoloty z internetu ---------- */
+function OnlineSource({
+  cfg,
+  set,
+  providers,
+  secretSet,
+}: {
+  cfg: AdsbConfig;
+  set: (patch: Partial<AdsbConfig>) => void;
+  providers: AdsbProvider[];
+  secretSet: boolean;
+}) {
+  const hasPos = cfg.lat !== 0 || cfg.lon !== 0;
+  return (
+    <>
+      <h3 className="strong">Samoloty z internetu</h3>
+      <p className="small muted" style={{ margin: 0 }}>
+        Otwarte serwisy zbierają dane z tysięcy anten wolontariuszy. Działa bez własnego odbiornika, a z nim uzupełnia samoloty,
+        których antena nie słyszy. Pobierane są wokół położenia anteny, w promieniu zasięgu (najwyżej 460 km).
+      </p>
+      {cfg.online && !hasPos && <Notice kind="warn">Ustaw położenie (Wskaż na mapie): bez niego serwer nie wie, skąd pobierać samoloty.</Notice>}
+      <div className="stack-sm" role="radiogroup" aria-label="Dostawca danych z internetu">
+        <Choice type="radio" name="adsb-online" checked={!cfg.online} onChange={() => set({ online: '' })} title="Wyłączone" description="Tylko własna antena." />
+        {providers.map((p) => (
+          <Choice
+            key={p.id}
+            type="radio"
+            name="adsb-online"
+            checked={cfg.online === p.id}
+            onChange={() => set({ online: p.id })}
+            title={p.name}
+            description={
+              <>
+                {p.terms}{' '}
+                <a href={p.site} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>
+                  {p.site.replace('https://', '')}
+                </a>
+              </>
+            }
+          />
+        ))}
+      </div>
+      {cfg.online === 'opensky' && (
+        <div className="form-grid">
+          <Field
+            label="client_id (opcjonalnie)"
+            htmlFor="adsb-osky-id"
+            hint="Konto na opensky-network.org → Account → API Client. Z kontem dane odświeżają się co ok. 30 s zamiast co kilka minut."
+          >
+            <input
+              id="adsb-osky-id"
+              className="input input-code"
+              autoComplete="off"
+              autoCapitalize="none"
+              autoCorrect="off"
+              value={cfg.openSkyId}
+              onChange={(e) => set({ openSkyId: e.target.value.trim() })}
+            />
+          </Field>
+          <Field label="client_secret" htmlFor="adsb-osky-secret" hint={secretSet ? 'Zapisany. Wpisz nowy tylko, aby go zmienić.' : undefined}>
+            <input
+              id="adsb-osky-secret"
+              className="input input-code"
+              type="password"
+              autoComplete="new-password"
+              placeholder={secretSet ? '••••••••' : ''}
+              disabled={!cfg.openSkyId}
+              value={cfg.openSkySecret}
+              onChange={(e) => set({ openSkySecret: e.target.value.trim() })}
+            />
+          </Field>
+        </div>
+      )}
+      {cfg.online && (
+        <p className="xsmall faint" style={{ margin: 0 }}>
+          Każdy samolot z internetu ma w opisie w TAK nazwę serwisu, jak wymagają jego warunki. Nie korzystamy z serwisów, które na to
+          nie pozwalają (np. Flightradar24, FlightAware).
+        </p>
+      )}
+    </>
   );
 }

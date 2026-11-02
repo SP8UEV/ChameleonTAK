@@ -121,6 +121,7 @@ type Plane struct {
 	Military bool      `json:"military"`
 	DistKm   float64   `json:"distKm"`
 	Seen     time.Time `json:"seen"`
+	Source   string    `json:"source"` // internet provider's name; "" = the receiver on the Pi
 }
 
 // Planes picks the aircraft that pass the filter.
@@ -247,6 +248,9 @@ func (p Plane) CoT(stale time.Duration) []byte {
 		remarks = append(remarks, "squawk "+p.Squawk)
 	}
 	remarks = append(remarks, "ICAO "+p.Hex)
+	if p.Source != "" {
+		remarks = append(remarks, "źródło: "+p.Source)
+	}
 	return []byte(fmt.Sprintf(`<event version="2.0" uid="ICAO-%[1]s" type="%[2]s" how="m-g" time="%[3]s" start="%[3]s" stale="%[4]s">`+
 		`<point lat="%.6[5]f" lon="%.6[6]f" hae="%.1[7]f" ce="50.0" le="50.0"/>`+
 		`<detail><contact callsign="%[8]s"/><track course="%.1[9]f" speed="%.2[10]f"/>`+
